@@ -22,7 +22,7 @@ SPRITE_DIR = Path("assets") / "sprites"
 FONT_DIR = Path("assets") / "fonts"
 SFX_DIR = Path("assets") / "sfx"
 
-NPC_SIZE = (260, 380)
+NPC_SIZE = (220, 320)
 
 
 # ---------------------------------------------------------------------------

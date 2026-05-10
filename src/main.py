@@ -176,6 +176,9 @@ class Game:
         self.modal = ModalPanel(SCREEN_SIZE, (640, 380))
         self.help_visible = False
 
+        # Pin the NPC + name plate just above the dialogue box.
+        self.scene.set_floor_y(self.dialogue.rect.top - 8)
+
     # ------------------------------------------------------------------
     # Health check + first persona
     # ------------------------------------------------------------------
