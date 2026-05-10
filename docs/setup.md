@@ -108,11 +108,17 @@ Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 
 `requirements.txt` pulls:
 
-- `pygame>=2.6.0`
+- `pygame-ce>=2.5.0` (drop-in replacement for `pygame` with up-to-date wheels)
 - `ollama>=0.3.3`
 - `requests>=2.32.0`
 - `pydantic>=2.8.0`
 - `pytest>=8.3.0`
+
+> **Why `pygame-ce` instead of `pygame`?** On recent Python versions
+> (3.12+) the original `pygame` source build fails on Windows because it
+> still imports `distutils.msvccompiler`, which was removed from the
+> stdlib. `pygame-ce` ships current pre-built wheels and is API-compatible
+> (`import pygame` still works in code).
 
 ---
 
@@ -153,6 +159,7 @@ pytest -q
 | Replies arrive but no text appears in the dialogue box             | Check that the input bar is in focus. Click on the bar and try again.                                                                  |
 | First reply takes 8+ seconds                                       | The daemon is loading the model into memory. Subsequent replies use the cache. If it stays slow, try `--model gemma2:2b`.               |
 | `pygame.error: video system not initialized` when running tests    | Tests do not need pygame; we only import `parsers`. If you see this, run `pytest -q tests/test_parsers.py` explicitly.                  |
+| `Failed to build 'pygame' ... ModuleNotFoundError: No module named 'distutils.msvccompiler'` | Old pin on `pygame` instead of `pygame-ce`. Pull the latest `requirements.txt` (`git pull`), then re-run `pip install -r requirements.txt`. |
 | `Activate.ps1 cannot be loaded`                                    | `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`, then re-run.                                                     |
 | Streaming reply hangs forever                                      | Check the Ollama tray app — sometimes a stuck request blocks the queue. Restart Ollama (right-click tray → Quit, then re-launch).       |
 | Game loads but text looks like boxes                               | The bundled font fell back to a system one that lacks glyphs. Drop a TTF into `assets/fonts/main.ttf`.                                  |

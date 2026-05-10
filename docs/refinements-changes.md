@@ -3,6 +3,28 @@
 A running log of scope changes and AI-assisted decisions made during
 development. Newest entry at the top.
 
+---
+
+## 2026-05-11 — Switched dependency from `pygame` to `pygame-ce` (build fix)
+
+**Tag:** `dependencies`, `windows`
+**Source:** install failure on Windows during step 3d of the setup guide.
+
+- First-time `pip install -r requirements.txt` failed on a clean Windows
+  machine while building `pygame` from source:
+  `ModuleNotFoundError: No module named 'distutils.msvccompiler'`.
+- Root cause: pip could not find a pre-built `pygame` wheel for the
+  installed Python version, so it tried to compile from source. The
+  source build imports `distutils.msvccompiler`, which was removed from
+  Python's stdlib in 3.12 and from `setuptools._distutils` in
+  setuptools 74+.
+- Fix: changed the pinned dependency to **`pygame-ce>=2.5.0`** — the
+  community-maintained fork ships up-to-date Windows wheels for current
+  Python versions and is a drop-in replacement (`import pygame` still
+  works unchanged in our code).
+- Updated `README.md` and `docs/setup.md` to reflect the new pin and
+  added a troubleshooting row for the original error message.
+
 > **How to read this file:** each entry is dated, tagged with the area
 > it touched, and notes whether the decision was AI-assisted (Cursor /
 > Claude as a coding assistant, or the local Llama model used for

@@ -113,7 +113,7 @@ Run the test suite with `pytest -q`.
 
 ## Dependencies
 
-- `pygame>=2.6.0`
+- `pygame-ce>=2.5.0` (drop-in replacement for `pygame` with current pre-built wheels)
 - `ollama>=0.3.3` (Python client; we also use `requests` directly)
 - `requests>=2.32.0`
 - `pydantic>=2.8.0`
