@@ -17,6 +17,32 @@ shopkeeper genre depends on (does this customer accept your price?).
 
 ---
 
+## Easy launch (Windows)
+
+If you are on Windows and just want to play, no PowerShell required:
+
+1. Install **Python 3.11+** from <https://www.python.org/downloads/windows/>
+   (tick *"Add python.exe to PATH"* during install) and **Ollama** from
+   <https://ollama.com/download>.
+2. Double-click **[setup.bat](setup.bat)** once. It creates the virtual
+   environment, installs dependencies, and pulls the default Ollama
+   model.
+3. Double-click **[run_game.bat](run_game.bat)** any time you want to
+   play.
+
+Optional extras:
+
+- **[run_demo.bat](run_demo.bat)** — double-click to launch the scripted
+  demo session (fixed seed + prompt logs) used for video evidence.
+- **[make_desktop_shortcut.bat](make_desktop_shortcut.bat)** — run once
+  to drop a "Wandering Goblet" shortcut on your Desktop pointing at
+  `run_game.bat`.
+
+The Quick Start below still works for any platform or for users who
+prefer the command line.
+
+---
+
 ## Quick start
 
 1. **Install Python 3.11 or newer** — <https://www.python.org/downloads/windows/>.

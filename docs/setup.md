@@ -3,6 +3,10 @@
 Complete instructions for getting **The Wandering Goblet** running on a
 clean Windows machine. Linux and macOS notes are at the bottom.
 
+> **In a hurry?** Skip to [section 8 — Easy launch with .bat files](#8-easy-launch-on-windows-no-powershell)
+> for the double-click route. The sections below cover the manual
+> PowerShell flow that section 8 wraps for you.
+
 ---
 
 ## 1. System requirements
@@ -193,3 +197,49 @@ python -m src.main
 
 On Apple Silicon the default model runs at native GPU speed and
 first-token latency is typically below 700 ms.
+
+---
+
+## 8. Easy launch on Windows (no PowerShell)
+
+For Windows users who would rather not touch a terminal, the project
+ships four batch files in the repo root that wrap the same commands as
+the manual sections above.
+
+| File                              | What it does                                                              | When to run     |
+| --------------------------------- | ------------------------------------------------------------------------- | --------------- |
+| **setup.bat**                     | Creates `.venv`, installs `requirements.txt`, pulls `llama3.2:3b`        | Once after clone |
+| **run_game.bat**                  | Activates the venv and launches the game                                  | Every play session |
+| **run_demo.bat**                  | Scripted demo: `--demo --persona broke_bard --turns 4 --seed 1234`        | For video evidence |
+| **make_desktop_shortcut.bat**     | Creates a "Wandering Goblet" shortcut on your Desktop                     | Optional, once   |
+
+### Step-by-step
+
+1. Install **Python 3.11+** from <https://www.python.org/downloads/windows/>
+   (tick *"Add python.exe to PATH"* during install) and **Ollama** from
+   <https://ollama.com/download>. These two installers cannot be wrapped
+   in a `.bat` because they need administrator UI prompts.
+2. Open the project folder in Windows Explorer.
+3. Double-click **`setup.bat`**. A console window appears, prints its
+   progress, and pauses on `Setup complete.` when done. Close it.
+4. Double-click **`run_game.bat`**. The game window opens.
+5. (Optional) double-click **`make_desktop_shortcut.bat`** once to put a
+   one-click launcher on your Desktop.
+
+### Passing extra flags through
+
+Both `run_game.bat` and `run_demo.bat` forward extra arguments to
+`python -m src.main`. So you can still customise from the command line
+or by editing the file:
+
+```bat
+run_game.bat --model qwen2.5:3b
+run_demo.bat --persona paranoid_wizard
+```
+
+### When to fall back to PowerShell
+
+If something in `setup.bat` fails (most common cause: Python or pip
+errors), the script pauses with the error visible. You can then re-run
+the same steps manually using the PowerShell instructions in section 4
+above to get a clearer view of what went wrong.
