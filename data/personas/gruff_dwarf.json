@@ -1,0 +1,12 @@
+{
+  "id": "gruff_dwarf",
+  "name": "Borla Stoneglove",
+  "voice": "blunt, short sentences, swears by Old Hammers and underestimates everything",
+  "secret": "lost her family's signet ring in a cave-in last month and has not told her clan",
+  "budget_gold": 35,
+  "haggle_floor_pct": 0.8,
+  "wants": ["strong stout", "a hearty stew", "any miner willing to head into the lower tunnels"],
+  "starting_attitude": "tired-but-fair",
+  "sprite": "dwarf.png",
+  "color_accent": [110, 90, 60]
+}

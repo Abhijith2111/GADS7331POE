@@ -1,0 +1,52 @@
+{
+  "items": [
+    {
+      "id": "small_ale",
+      "name": "Small Ale",
+      "base_price": 3,
+      "description": "A modest mug of the house brew. Filling, not flashy."
+    },
+    {
+      "id": "strong_stout",
+      "name": "Strong Stout",
+      "base_price": 6,
+      "description": "Dark, bitter, and the favourite of working folk."
+    },
+    {
+      "id": "hot_tea",
+      "name": "Hot Tea",
+      "base_price": 2,
+      "description": "Brewed strong with a sprig of mountain mint."
+    },
+    {
+      "id": "fine_wine",
+      "name": "Fine Wine",
+      "base_price": 18,
+      "description": "A southern vintage the cellar treats like an heirloom."
+    },
+    {
+      "id": "hearty_stew",
+      "name": "Hearty Stew",
+      "base_price": 5,
+      "description": "Mutton, root vegetables, and barley. Warms the bones."
+    },
+    {
+      "id": "private_room",
+      "name": "Private Room (one night)",
+      "base_price": 15,
+      "description": "A small upstairs room with a lock on the door."
+    },
+    {
+      "id": "corner_table",
+      "name": "Corner Table (one evening)",
+      "base_price": 4,
+      "description": "Tucked behind the stairs. Quiet, unwatched."
+    },
+    {
+      "id": "spiced_water",
+      "name": "Spiced Water",
+      "base_price": 1,
+      "description": "Plain water with a pinch of salt and clove. Travellers' fare."
+    }
+  ]
+}

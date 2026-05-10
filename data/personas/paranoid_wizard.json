@@ -1,0 +1,12 @@
+{
+  "id": "paranoid_wizard",
+  "name": "Master Yvenne Corrowmoor",
+  "voice": "clipped, formal, drops into mutters mid-sentence and glances at doors",
+  "secret": "is being scryed by a former apprentice and believes they were followed here",
+  "budget_gold": 60,
+  "haggle_floor_pct": 0.85,
+  "wants": ["hot tea, no bergamot", "a private room", "any news of strange ravens"],
+  "starting_attitude": "guarded",
+  "sprite": "wizard.png",
+  "color_accent": [120, 70, 180]
+}

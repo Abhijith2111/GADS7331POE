@@ -1,0 +1,5 @@
+pygame>=2.6.0
+ollama>=0.3.3
+requests>=2.32.0
+pydantic>=2.8.0
+pytest>=8.3.0

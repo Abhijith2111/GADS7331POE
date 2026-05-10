@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Pygame
+*.log
+
+# Project save state (committed empty template, runtime saves are local only)
+data/savegame.json
+
+# Generated transcripts from --demo mode
+demo_log_*.txt
+prompt_log_*.jsonl

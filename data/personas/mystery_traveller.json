@@ -1,0 +1,12 @@
+{
+  "id": "mystery_traveller",
+  "name": "the Stranger in Grey",
+  "voice": "soft, deliberate, answers questions with questions and never volunteers a name",
+  "secret": "is a courier carrying a sealed letter that names a city official as a traitor",
+  "budget_gold": 45,
+  "haggle_floor_pct": 0.9,
+  "wants": ["water, nothing else", "to be left alone", "directions to the eastern road by night"],
+  "starting_attitude": "neutral",
+  "sprite": "stranger.png",
+  "color_accent": [90, 100, 110]
+}

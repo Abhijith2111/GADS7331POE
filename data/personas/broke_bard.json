@@ -1,0 +1,12 @@
+{
+  "id": "broke_bard",
+  "name": "Pip Halloran",
+  "voice": "rambling, self-pitying, fond of bad metaphors and unsolicited verses",
+  "secret": "owes the thieves' guild forty gold and is hiding from a collector",
+  "budget_gold": 12,
+  "haggle_floor_pct": 0.7,
+  "wants": ["cheap_ale", "a corner table out of sight", "rumours of caravan work"],
+  "starting_attitude": "anxious-but-friendly",
+  "sprite": "bard.png",
+  "color_accent": [180, 130, 70]
+}

@@ -1,0 +1,12 @@
+{
+  "id": "smug_noble",
+  "name": "Lord Caspian Vell of House Vellmark",
+  "voice": "languid, condescending, peppered with weather observations and minor titles",
+  "secret": "is here incognito to gamble; his estate is nearly bankrupt",
+  "budget_gold": 90,
+  "haggle_floor_pct": 0.95,
+  "wants": ["the finest wine you have", "discretion", "a card game with stakes"],
+  "starting_attitude": "haughty",
+  "sprite": "noble.png",
+  "color_accent": [200, 60, 70]
+}
