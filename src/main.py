@@ -33,6 +33,7 @@ from src.game.ui import (
     HIGHLIGHT,
     PARCHMENT,
     WARN,
+    ActionPanel,
     Button,
     DialogueBox,
     ModalPanel,
@@ -155,26 +156,56 @@ class Game:
         dialogue_h = 240
         input_h = 48
         status_h = 60
+        side_panel_w = 220
+        side_gap = 12
 
         self.status_bar = StatusBar(
             pygame.Rect(margin, margin + 26, sw - margin * 2, status_h)
         )
+
+        chat_w = sw - margin * 2 - side_panel_w - side_gap
         self.dialogue = DialogueBox(
             pygame.Rect(
                 margin,
                 sh - margin - input_h - 12 - dialogue_h,
-                sw - margin * 2,
+                chat_w,
                 dialogue_h,
             )
         )
         self.text_input = TextInput(
-            pygame.Rect(margin, sh - margin - input_h, sw - margin * 2, input_h),
+            pygame.Rect(margin, sh - margin - input_h, chat_w, input_h),
             submit_cb=self._on_player_submit,
         )
-        self.toasts = ToastStack(anchor=(sw - margin, sh - margin - input_h - dialogue_h - 30))
+
+        # Action panel sits to the right of the chat + input, spanning
+        # both vertically. Buttons replace the old slash-command flow.
+        action_x = margin + chat_w + side_gap
+        action_y = sh - margin - input_h - 12 - dialogue_h
+        action_h = dialogue_h + 12 + input_h
+        self.actions = ActionPanel(
+            pygame.Rect(action_x, action_y, side_panel_w, action_h)
+        )
+        self.actions.set_buttons(
+            [
+                ("Show stock", self._show_stock_modal),
+                ("Sell item...", self._open_sell_picker),
+                ("Ask for work", self._request_quest),
+                ("Next customer", self._next_customer),
+                ("Save game", self._save_game),
+                ("Help", self._show_help),
+            ]
+        )
+
+        self.toasts = ToastStack(
+            anchor=(sw - margin - side_panel_w - side_gap, sh - margin - input_h - dialogue_h - 30)
+        )
         self.banner = TransparencyBanner(sw)
-        self.modal = ModalPanel(SCREEN_SIZE, (640, 380))
+        self.modal = ModalPanel(SCREEN_SIZE, (720, 520))
         self.help_visible = False
+
+        # Sell flow state (active while the sell modal is open).
+        self._sell_item: dict[str, Any] | None = None
+        self._sell_offer: int = 0
 
         # Pin the NPC + name plate just above the dialogue box.
         self.scene.set_floor_y(self.dialogue.rect.top - 8)
@@ -244,26 +275,174 @@ class Game:
                 return
             self._start_haggle(item_id, price)
         elif cmd == "/items":
-            lines = [f"  - {i['id']}: {i['name']} (base {i['base_price']}g)" for i in self.items]
-            self.dialogue.add("system", "Stock:\n" + "\n".join(lines))
+            self._show_stock_modal()
         elif cmd == "/save":
-            self.world.save()
-            self.toasts.push("World state saved.", GOOD)
+            self._save_game()
         else:
             self.toasts.push(f"Unknown command: {cmd}. Try /help.", WARN)
 
     def _show_help(self) -> None:
         self.dialogue.add(
             "system",
-            "Commands:\n"
-            "  /sell <item_id> <price>   offer to sell an item at a price (haggle)\n"
-            "  /quest                    ask the customer if they have work\n"
-            "  /items                    list stock\n"
-            "  /next                     send this customer away, spawn the next one\n"
-            "  /save                     save the world state\n"
-            "  /help                     this help\n"
-            "Press F1 for a quick reference, T to toggle the AI banner.",
+            "How to play:\n"
+            "  - Type a message and press Enter to talk to the customer.\n"
+            "  - Use the buttons on the right for actions:\n"
+            "      Show stock     - the bar's menu and prices\n"
+            "      Sell item...   - pick an item, set a price, and haggle\n"
+            "      Ask for work   - see if the customer has a quest\n"
+            "      Next customer  - send this one away, bring in the next\n"
+            "      Save game      - persist the world state to disk\n"
+            "  - Hot-keys: F1 help, F2 settings, F5 next customer, T toggles\n"
+            "    the AI banner, Esc quits.\n"
+            "  - Power users can still type slash commands like\n"
+            "    /sell strong_stout 5 directly into the input bar.",
         )
+
+    # ------------------------------------------------------------------
+    # Action-panel handlers
+    # ------------------------------------------------------------------
+    def _save_game(self) -> None:
+        self.world.save()
+        self.toasts.push("World state saved.", GOOD)
+
+    def _show_stock_modal(self) -> None:
+        """Read-only modal listing every item and its base price."""
+        body_lines = ["The Wandering Goblet's catalogue:", ""]
+        for item in self.items:
+            body_lines.append(
+                f"  {item['name']:<28} {item['base_price']:>3} gold"
+            )
+            body_lines.append(f"      {item['description']}")
+            body_lines.append("")
+        body = "\n".join(body_lines)
+
+        modal_rect = self.modal.rect
+        close_btn = Button(
+            "Close",
+            pygame.Rect(modal_rect.right - 140, modal_rect.bottom - 56, 120, 38),
+            self.modal.hide,
+        )
+        self.modal.show("Stock", body, [close_btn])
+
+    def _open_sell_picker(self) -> None:
+        """Stage 1 of the sell flow: pick which item to offer."""
+        if self.streaming or self.current_npc is None:
+            self.toasts.push("Wait for the customer's reply first.", WARN)
+            return
+
+        modal_rect = self.modal.rect
+        body = (
+            f"What would you like to offer {self.current_npc.name}?\n"
+            "Pick an item, then set your price on the next screen."
+        )
+        # Two columns of item buttons.
+        cols = 2
+        col_w = (modal_rect.width - 60) // cols
+        row_h = 44
+        gap_x = 20
+        gap_y = 8
+        top = modal_rect.top + 130
+        buttons: list[Button] = []
+        for i, item in enumerate(self.items):
+            row, col = divmod(i, cols)
+            bx = modal_rect.left + 20 + col * (col_w + gap_x)
+            by = top + row * (row_h + gap_y)
+            label = f"{item['name']} ({item['base_price']}g)"
+            buttons.append(
+                Button(
+                    label=label,
+                    rect=pygame.Rect(bx, by, col_w, row_h),
+                    on_click=(lambda i=item: self._open_sell_price(i)),
+                )
+            )
+        buttons.append(
+            Button(
+                "Cancel",
+                pygame.Rect(modal_rect.right - 140, modal_rect.bottom - 56, 120, 38),
+                self.modal.hide,
+            )
+        )
+        self.modal.show("Sell to Customer", body, buttons)
+
+    def _open_sell_price(self, item: dict[str, Any]) -> None:
+        """Stage 2 of the sell flow: adjust price, then offer."""
+        self._sell_item = item
+        self._sell_offer = int(item["base_price"])
+        self._refresh_sell_price_modal()
+
+    def _refresh_sell_price_modal(self) -> None:
+        if self._sell_item is None or self.current_npc is None:
+            return
+        item = self._sell_item
+        offer = max(1, self._sell_offer)
+        body = (
+            f"{item['name']}\n"
+            f"  {item['description']}\n\n"
+            f"Base price:    {item['base_price']} gold\n"
+            f"Your offer:    {offer} gold"
+        )
+        modal_rect = self.modal.rect
+        # Stepper row, centred horizontally.
+        step_y = modal_rect.bottom - 130
+        # Six steppers: -5, -1, current display label, +1, +5
+        step_specs = [
+            ("-5", lambda: self._adjust_offer(-5)),
+            ("-1", lambda: self._adjust_offer(-1)),
+            ("+1", lambda: self._adjust_offer(+1)),
+            ("+5", lambda: self._adjust_offer(+5)),
+        ]
+        sw_btn = 60
+        gap = 12
+        total_w = len(step_specs) * sw_btn + (len(step_specs) - 1) * gap
+        sx = modal_rect.centerx - total_w // 2
+        buttons: list[Button] = []
+        for i, (label, cb) in enumerate(step_specs):
+            buttons.append(
+                Button(
+                    label=label,
+                    rect=pygame.Rect(sx + i * (sw_btn + gap), step_y, sw_btn, 38),
+                    on_click=cb,
+                )
+            )
+        offer_btn = Button(
+            f"Offer {offer} gold",
+            pygame.Rect(modal_rect.left + 20, modal_rect.bottom - 70, 240, 44),
+            self._confirm_offer,
+        )
+        back_btn = Button(
+            "Back",
+            pygame.Rect(modal_rect.left + 280, modal_rect.bottom - 70, 100, 44),
+            self._open_sell_picker,
+        )
+        cancel_btn = Button(
+            "Cancel",
+            pygame.Rect(modal_rect.right - 140, modal_rect.bottom - 70, 120, 44),
+            self._cancel_sell,
+        )
+        self.modal.show(
+            f"Sell {item['name']}",
+            body,
+            buttons + [offer_btn, back_btn, cancel_btn],
+        )
+
+    def _adjust_offer(self, delta: int) -> None:
+        self._sell_offer = max(1, self._sell_offer + delta)
+        self._refresh_sell_price_modal()
+
+    def _cancel_sell(self) -> None:
+        self._sell_item = None
+        self._sell_offer = 0
+        self.modal.hide()
+
+    def _confirm_offer(self) -> None:
+        if self._sell_item is None:
+            return
+        item_id = self._sell_item["id"]
+        price = max(1, self._sell_offer)
+        self._sell_item = None
+        self._sell_offer = 0
+        self.modal.hide()
+        self._start_haggle(item_id, price)
 
     # ------------------------------------------------------------------
     # Chat streaming
@@ -448,7 +627,7 @@ class Game:
             )
         elif decision.counter_offer is not None:
             self.toasts.push(
-                f"Counter-offer: {decision.counter_offer}g. /sell {ev.item_id} <price> to reply.",
+                f"Counter-offer: {decision.counter_offer}g. Use Sell item... to reply.",
                 HIGHLIGHT,
             )
         if not ev.ok:
@@ -691,10 +870,18 @@ class Game:
                         self.text_input.cursor = 0
                         self._on_player_submit(text)
                 else:
-                    if not self.modal.handle_event(event):
-                        self.dialogue.handle_event(event)
+                    # Modal eats events first. If it's visible at all, the
+                    # action panel and dialogue scroll are locked out so
+                    # clicks outside the modal don't accidentally fire.
+                    self.modal.handle_event(event)
+                    if not self.modal.visible:
+                        if not self.actions.handle_event(event):
+                            self.dialogue.handle_event(event)
 
             self._drain_events()
+            # Reflect streaming state in the side panel so buttons are
+            # clearly unavailable while the LLM is busy.
+            self.actions.set_enabled_all(not self.streaming)
 
             if self.demo_mode:
                 self._drive_demo()
@@ -714,6 +901,7 @@ class Game:
             )
             self.dialogue.draw(self.screen)
             self.text_input.draw(self.screen)
+            self.actions.draw(self.screen)
             self.toasts.draw(self.screen)
             self.modal.draw(self.screen)
             self._draw_corner_help()

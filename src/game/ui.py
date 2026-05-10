@@ -349,6 +349,100 @@ class ModalPanel:
 
 
 # ---------------------------------------------------------------------------
+# Action panel — vertical stack of buttons next to the chat box
+# ---------------------------------------------------------------------------
+class ActionPanel:
+    """Vertical stack of named action buttons.
+
+    Sized to the rect it is constructed with; the buttons fill the rect
+    evenly. ``set_buttons`` rebuilds the layout (used both initially and
+    when the enabled state changes, e.g. while the LLM is streaming).
+    """
+
+    def __init__(self, rect: pygame.Rect, title: str = "Actions") -> None:
+        self.rect = rect
+        self.title = title
+        self.title_font = load_font(14, bold=True)
+        self.button_font = load_font(18, bold=True)
+        self.buttons: list[Button] = []
+        # Cached so we can re-disable/re-enable without callers re-passing.
+        self._specs: list[tuple[str, Callable[[], None]]] = []
+        self._enabled = True
+
+    def set_buttons(self, specs: list[tuple[str, Callable[[], None]]]) -> None:
+        self._specs = specs
+        self._rebuild()
+
+    def set_enabled_all(self, enabled: bool) -> None:
+        if enabled == self._enabled:
+            return
+        self._enabled = enabled
+        self._rebuild()
+
+    def _rebuild(self) -> None:
+        self.buttons = []
+        if not self._specs:
+            return
+        padding = 10
+        title_h = self.title_font.get_height() + 10
+        gap = 6
+        n = len(self._specs)
+        avail_h = self.rect.height - padding * 2 - title_h
+        button_h = max(28, (avail_h - gap * (n - 1)) // n)
+        button_w = self.rect.width - padding * 2
+        x = self.rect.left + padding
+        y0 = self.rect.top + padding + title_h
+        for i, (label, cb) in enumerate(self._specs):
+            r = pygame.Rect(x, y0 + i * (button_h + gap), button_w, button_h)
+            self.buttons.append(
+                Button(label=label, rect=r, on_click=cb, enabled=self._enabled)
+            )
+
+    def handle_event(self, event: pygame.event.Event) -> bool:
+        if event.type == pygame.MOUSEMOTION:
+            for b in self.buttons:
+                b.hot = b.rect.collidepoint(event.pos) and b.enabled
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            for b in self.buttons:
+                if b.enabled and b.rect.collidepoint(event.pos):
+                    b.on_click()
+                    return True
+        return False
+
+    def draw(self, surface: pygame.Surface) -> None:
+        bg = pygame.Surface(self.rect.size, pygame.SRCALPHA)
+        bg.fill((20, 14, 8, 170))
+        pygame.draw.rect(bg, PANEL_BORDER, bg.get_rect(), 2)
+        surface.blit(bg, self.rect.topleft)
+
+        title_surf = self.title_font.render(self.title.upper(), True, INK_SOFT)
+        surface.blit(title_surf, (self.rect.left + 10, self.rect.top + 6))
+
+        for b in self.buttons:
+            base = (90, 60, 30) if b.enabled else (50, 40, 30)
+            if b.hot:
+                base = (130, 90, 40)
+            pygame.draw.rect(surface, base, b.rect, border_radius=6)
+            pygame.draw.rect(
+                surface,
+                HIGHLIGHT if b.enabled else INK_SOFT,
+                b.rect,
+                2,
+                border_radius=6,
+            )
+            label = self.button_font.render(
+                b.label, True, PARCHMENT if b.enabled else INK_SOFT
+            )
+            surface.blit(
+                label,
+                (
+                    b.rect.centerx - label.get_width() // 2,
+                    b.rect.centery - label.get_height() // 2,
+                ),
+            )
+
+
+# ---------------------------------------------------------------------------
 # Toast (transient bottom-right notification)
 # ---------------------------------------------------------------------------
 @dataclass
