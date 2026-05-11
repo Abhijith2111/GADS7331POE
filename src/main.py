@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import queue
+import random
 import sys
 import threading
 import time
@@ -116,6 +117,36 @@ MODE_LOCATION = "LOCATION"
 
 
 # ---------------------------------------------------------------------------
+# Wrong-click satire lines.
+#
+# Indexed by how many times the player has already clicked *this* specific
+# hotspot in the current session. We escalate from neutral, to dry, to mild
+# sass. The final bucket loops with a small variation pool so a stubborn
+# player gets some variety instead of one fixed line forever.
+# ---------------------------------------------------------------------------
+WRONG_CLICK_LINES: dict[int, list[str]] = {
+    0: [
+        "Nothing useful here. (You searched the {name}.)",
+    ],
+    1: [
+        "Still nothing at the {name}. Maybe somewhere else?",
+        "The {name} is just as empty as it was a moment ago.",
+    ],
+    2: [
+        "You just checked the {name}. Go away.",
+        "The {name} hasn't grown new clues in the last five seconds.",
+        "Yes, the {name}. We saw it. There is nothing there.",
+    ],
+    3: [
+        "Are we okay? The {name} is still empty.",
+        "If you keep clicking the {name}, the {name} is going to file a complaint.",
+        "Bold strategy: searching the same {name} until it gives in.",
+        "The {name} would like to be left alone now.",
+    ],
+}
+
+
+# ---------------------------------------------------------------------------
 # Game
 # ---------------------------------------------------------------------------
 class Game:
@@ -157,6 +188,9 @@ class Game:
         self._pending_found_quest: dict[str, Any] | None = None
         # Schedule auto-return to tavern after a successful quest.
         self._return_to_tavern_at: float | None = None
+        # Per-(location, hotspot) wrong-click counter, drives escalating
+        # satire on repeat clicks. Reset on every fresh location entry.
+        self._wrong_click_counts: dict[tuple[str, str], int] = {}
 
         # UI layout.
         self._init_ui()
@@ -662,6 +696,9 @@ class Game:
         self.location_scene.set_location(location_id)
         self.location_scene.set_quests(self.world.quests_at(location_id))
         self.text_input.set_active(False)
+        # Reset the per-hotspot wrong-click counter so each visit starts
+        # fresh; the sass only escalates within a single sitting.
+        self._wrong_click_counts = {}
         self._refresh_action_buttons()
         loc = get_location(location_id)
         self.toasts.push(f"You arrive at {loc['name']}.", HIGHLIGHT)
@@ -1032,11 +1069,17 @@ class Game:
         self._start_found_flow(match, hotspot_id)
 
     def _handle_wrong_hotspot(self, hotspot_id: str) -> None:
-        loc = get_location(self.current_location_id or "")
-        hotspot = get_hotspot(self.current_location_id or "", hotspot_id) or {
-            "name": "this spot"
-        }
-        msg = f"Nothing useful here. (You searched the {hotspot['name']}.)"
+        loc_id = self.current_location_id or ""
+        hotspot = get_hotspot(loc_id, hotspot_id) or {"name": "this spot"}
+        # Bump the per-(location, hotspot) click count and pick a line
+        # from the appropriate sass bucket. The last bucket is reused
+        # indefinitely with a random pick for stubborn players.
+        key = (loc_id, hotspot_id)
+        count = self._wrong_click_counts.get(key, 0)
+        self._wrong_click_counts[key] = count + 1
+        bucket = min(count, max(WRONG_CLICK_LINES))
+        template = random.choice(WRONG_CLICK_LINES[bucket])
+        msg = template.format(name=hotspot["name"])
         self.location_scene.show_note(msg)
 
     def _start_found_flow(self, quest: dict[str, Any], hotspot_id: str) -> None:
