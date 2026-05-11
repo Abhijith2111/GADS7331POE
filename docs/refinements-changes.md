@@ -5,6 +5,56 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-05-11 — Added quest exploration mode (AI-assisted)
+
+**Tag:** `feature`, `scope`, `prompt`
+**Source:** plan in `docs/quest_exploration_mode_*.plan.md`, built out with
+Cursor / Claude in agent mode.
+
+- Until this point the quest loop ended at "customer offers a quest,
+  reward goes into a pending bucket". The marker had no visible reason
+  to keep playing once they'd seen the haggle and quest prompts fire.
+- Added a second mode: once at least one quest is active, the action
+  panel shows **"Leave the bar"**. That opens a world map of four
+  hand-authored locations (mines, town, outskirts, castle hall). Each
+  location has four search hotspots. The location with the quest's
+  target glows; the others are dimmed but still clickable for free
+  exploration.
+- In a location, clicking the right hotspot fires one short JSON-mode
+  prompt (`build_found_messages` in `prompts.py`) for an in-character
+  "you found it" line; the reward is deposited, reputation ticks, and
+  the player is whisked back to the bar after a 1.6 s celebration.
+  Wrong clicks print a fixed "Nothing useful here." note with no LLM
+  call.
+- **MVP scope rationale.** Locations and hotspots are hand-authored,
+  not LLM-generated, because (a) the LLM-driven *placement* is the
+  interesting decision the model already makes well, and (b) tiling
+  the player's world from a model output adds a much bigger reliability
+  problem (mis-named ids, locations the player can't actually visit)
+  for very little gameplay payoff inside the brief's time budget.
+  Adding a fifth location later is one dict entry in
+  `src/game/world_map.py`.
+- **Schema change.** `Quest` Pydantic model gained `location` and
+  `hotspot` fields. Both are clamped server-side (unknown location →
+  `outskirts`; hotspot from the wrong location → that location's first
+  hotspot) so a wandering model can never make a quest unreachable.
+  `WorldState.load` was taught to fill defaults on older saves missing
+  these fields, so existing players keep their progress.
+- **Art is procedural.** Each location has a 4-colour palette and a
+  small painter function in `world_map.py` (mines = jagged stone +
+  torch glow, town = silhouette buildings, outskirts = trees + path,
+  castle hall = columns + banner + throne). Consistent with the rest
+  of the game's "no shipped image assets" policy.
+- Tests added in `tests/test_parsers.py`: `TestParseQuestLocation`
+  covers the clamping/fallback behaviour, `TestExtractItemPhrase`
+  covers the regex used to feed the found-it prompt.
+- Docs updated: `README.md` got a "Leaving the bar" subsection,
+  `docs/high-concept.md` extended its "what's code / what's LLM"
+  table, `docs/ollama-plan.md` added the found-it row + section 4.4,
+  and `docs/prompts-used.md` added entries C4 and D1–D2.
+
+---
+
 ## 2026-05-11 — Switched dependency from `pygame` to `pygame-ce` (build fix)
 
 **Tag:** `dependencies`, `windows`

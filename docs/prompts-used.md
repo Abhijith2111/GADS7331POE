@@ -225,29 +225,110 @@ if v not in {"low", "medium", "high"}: return "low"
 
 **Verdict:** **good**. Game can colour quests by danger reliably.
 
+### C4 — Locations + hotspots (exploration mode)
+
+When we added the exploration mode, the quest schema needed two new
+fields: the LLM has to choose *where* in the world the player will go.
+We extended the system prompt with a rendered table of all four
+locations (id, name, blurb, and their four hotspot ids):
+
+```
+--- Locations available in this game ---
+- mines (The Old Mines): Dark tunnels east of town, abandoned twenty years.
+    hotspots:
+      - main_shaft (Main Shaft)
+      - collapsed_tunnel (Collapsed Tunnel)
+      ...
+- town (Town Square): Cobbled square, market stalls, the apothecary.
+    hotspots:
+      ...
+```
+
+The output schema gained `"location"` and `"hotspot"` fields. The
+prompt explicitly instructs the model to pick a location that *fits*
+the narrative target ("if the target is a missing pickaxe, the mines
+fit better than the castle"). The Pydantic validator clamps unknown
+locations to `outskirts` and clamps a hotspot from the wrong location
+to the chosen location's first hotspot, so a wandering model can
+never make a quest unreachable.
+
+**Example reply (broke_bard):**
+> `{"title":"A Lute Recovered","summary":"Find my lute, will you? Left
+> it by the broken bridge; can't bring myself to look.","target":"the
+> eastern bridge","reward_gold":10,"danger":"low","location":"outskirts",
+> "hotspot":"broken_bridge"}`
+
+**Verdict:** **excellent**. The default model picked sensible
+location/hotspot pairs in roughly 9/10 generations; the validator
+silently fixed the 1/10 that didn't.
+
 ---
 
-## D. Failed experiments worth recording
+## D. Found-it micro-prompt (JSON-mode, one-shot)
 
-### D1 — Asking the LLM to track gold itself
+### D1 — First attempt: free text
+
+```
+Write a short line describing the moment the keeper finds the item.
+```
+
+**Example reply:**
+> "Sure, here is a line: 'After much searching, the brave hero finally
+> located the mysterious object hidden in the dark recess of the
+> ancient cave...'"
+
+**Verdict:** **failed**. Stage-narrator voice, mentioned "the hero"
+instead of speaking to the keeper, returned prose around the line.
+
+### D2 — JSON-mode + persona + item phrase (current)
+
+We extract a noun phrase from the quest summary using a small regex
+(see `extract_item_phrase` in `parsers.py`) and pass it in along with
+the location and hotspot *names* (not ids). The system prompt:
+
+```
+FOUND_RULES = """You write ONE short narrative line describing the
+moment the tavern keeper finds the item ... second-person voice ...
+Reply with ONLY a JSON object: { "line": string }"""
+
+USER: The keeper has just reached the Rusty Miner's Cart at The Old
+Mines and located the lost lute. Write the in-the-moment narration
+as JSON only.
+```
+
+**Example reply:**
+> `{"line":"You ease the cart's lid back and there it is, the lost
+> lute, dust-furred but whole."}`
+
+**Verdict:** **excellent**. Second person, mentions the item phrase,
+mentions the hotspot, stays in one or two sentences. The
+`DEGRADED_FOUND` fallback ("You find what they asked for, tucked
+away.") covers the rare parse miss so the player is never soft-locked
+at the end of a quest.
+
+---
+
+## E. Failed experiments worth recording
+
+### E1 — Asking the LLM to track gold itself
 
 For one afternoon we let the chat prompt include "you may declare
 gold gained" and parsed those declarations. The model invented and
 duplicated transactions. Reverted: gold is mutated only by code.
 
-### D2 — Single combined prompt for chat + haggle
+### E2 — Single combined prompt for chat + haggle
 
 We tried having the chat path optionally emit a haggle block at the
 end (`<HAGGLE> ... </HAGGLE>`). It worked maybe 70 % of the time;
 30 % of the time the closing tag was missing. Splitting into two
 explicit endpoints fixed this completely.
 
-### D3 — Higher temperature for variety
+### E3 — Higher temperature for variety
 
 Pushed chat temperature to 1.2 in search of more flavour. Lines became
 incoherent and broke character. Reverted to 0.8 (current default).
 
-### D4 — Persona-specific system prompts per file
+### E4 — Persona-specific system prompts per file
 
 Idea: store the *whole* system prompt inside each persona JSON.
 Rejected because: (a) it duplicates the rules across 5 files, so a
@@ -257,7 +338,7 @@ templated persona card — is safer and more maintainable.
 
 ---
 
-## E. Iteration notes
+## F. Iteration notes
 
 - Around 60 % of prompt time was spent on the chat path's tone.
   Once the persona card shape settled, voices stabilised quickly.

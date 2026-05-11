@@ -43,15 +43,21 @@ from src.game.ui import (
     TransparencyBanner,
     wrap_text,
 )
+from src.game.world_map import LocationScene, WorldMapScene
+from src.game.world_map_data import get_hotspot, get_location
 from src.game.world_state import WorldState
 from src.llm import prompts as P
 from src.llm.ollama_client import OllamaClient, OllamaConfig, OllamaError
 from src.llm.parsers import (
+    DEGRADED_FOUND,
     DEGRADED_HAGGLE,
     DEGRADED_QUEST,
+    FoundLine,
     HaggleDecision,
     Quest,
     call_with_retry,
+    extract_item_phrase,
+    parse_found_line,
     parse_haggle,
     parse_quest,
 )
@@ -89,8 +95,24 @@ class QuestResultEvent:
 
 
 @dataclass
+class FoundResultEvent:
+    quest_title: str
+    found: FoundLine
+    ok: bool
+
+
+@dataclass
 class ErrorEvent:
     message: str
+
+
+# ---------------------------------------------------------------------------
+# Mode constants — TAVERN is the chat-and-haggle bar, WORLD_MAP shows the
+# four-location selector, LOCATION is the in-world hotspot search.
+# ---------------------------------------------------------------------------
+MODE_TAVERN = "TAVERN"
+MODE_WORLD_MAP = "WORLD_MAP"
+MODE_LOCATION = "LOCATION"
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +149,15 @@ class Game:
         self.streaming = False
         self.event_q: "queue.Queue[Any]" = queue.Queue()
 
+        # Mode state machine: TAVERN | WORLD_MAP | LOCATION. Each mode
+        # owns which middle scene is drawn and which input flows fire.
+        self.mode: str = MODE_TAVERN
+        self.current_location_id: str | None = None
+        # Set when a hotspot click triggers the found-it LLM call.
+        self._pending_found_quest: dict[str, Any] | None = None
+        # Schedule auto-return to tavern after a successful quest.
+        self._return_to_tavern_at: float | None = None
+
         # UI layout.
         self._init_ui()
 
@@ -136,6 +167,7 @@ class Game:
 
         # First customer.
         self._spawn_next_customer()
+        self._refresh_action_buttons()
 
         # In demo mode we run a scripted set of player inputs and exit.
         self._demo_script: list[str] = []
@@ -185,16 +217,8 @@ class Game:
         self.actions = ActionPanel(
             pygame.Rect(action_x, action_y, side_panel_w, action_h)
         )
-        self.actions.set_buttons(
-            [
-                ("Show stock", self._show_stock_modal),
-                ("Sell item...", self._open_sell_picker),
-                ("Ask for work", self._request_quest),
-                ("Next customer", self._next_customer),
-                ("Save game", self._save_game),
-                ("Help", self._show_help),
-            ]
-        )
+        # Buttons are configured dynamically per mode by
+        # ``_refresh_action_buttons`` so we don't seed any here.
 
         self.toasts = ToastStack(
             anchor=(sw - margin - side_panel_w - side_gap, sh - margin - input_h - dialogue_h - 30)
@@ -209,6 +233,18 @@ class Game:
 
         # Pin the NPC + name plate just above the dialogue box.
         self.scene.set_floor_y(self.dialogue.rect.top - 8)
+
+        # World-map and location scenes share the same canvas the tavern
+        # scene uses (full screen minus banner). They are built once and
+        # re-shown when the mode changes.
+        canvas_rect = pygame.Rect(
+            margin,
+            margin + 26 + status_h + 8,
+            sw - margin * 2 - side_panel_w - side_gap,
+            sh - margin - (margin + 26 + status_h + 8),
+        )
+        self.world_map_scene = WorldMapScene(canvas_rect)
+        self.location_scene = LocationScene(canvas_rect)
 
     # ------------------------------------------------------------------
     # Health check + first persona
@@ -292,6 +328,10 @@ class Game:
             "      Ask for work   - see if the customer has a quest\n"
             "      Next customer  - send this one away, bring in the next\n"
             "      Save game      - persist the world state to disk\n"
+            "  - Leaving the bar: once you have a quest, the side panel\n"
+            "    shows 'Leave the bar'. Pick a location, then click the\n"
+            "    glowing hotspot to find the item. Wrong clicks just\n"
+            "    print 'Nothing useful here.' and cost you nothing.\n"
             "  - Hot-keys: F1 help, F2 settings, F5 next customer, T toggles\n"
             "    the AI banner, Esc quits.\n"
             "  - Power users can still type slash commands like\n"
@@ -566,6 +606,74 @@ class Game:
             self.world.mark_persona_served(self.current_npc.id)
             self.world.save()
         self._spawn_next_customer()
+        self._refresh_action_buttons()
+
+    # ------------------------------------------------------------------
+    # Mode transitions + action-panel refresh
+    # ------------------------------------------------------------------
+    def _refresh_action_buttons(self) -> None:
+        """Rebuild the side action buttons for the current mode.
+
+        Called whenever the mode changes or the active-quest list
+        changes so the player only ever sees buttons that make sense
+        right now (e.g. "Leave the bar" is hidden until they have a
+        quest, and the bar-only buttons disappear in exploration).
+        """
+        if self.mode == MODE_TAVERN:
+            buttons = [
+                ("Show stock", self._show_stock_modal),
+                ("Sell item...", self._open_sell_picker),
+                ("Ask for work", self._request_quest),
+                ("Next customer", self._next_customer),
+                ("Save game", self._save_game),
+            ]
+            if self.world.active_quests:
+                buttons.append(("Leave the bar", self._enter_world_map))
+            buttons.append(("Help", self._show_help))
+        elif self.mode == MODE_WORLD_MAP:
+            buttons = [
+                ("Back to bar", self._return_to_tavern),
+                ("Save game", self._save_game),
+                ("Help", self._show_help),
+            ]
+        else:  # MODE_LOCATION
+            buttons = [
+                ("Back to map", self._enter_world_map),
+                ("Back to bar", self._return_to_tavern),
+                ("Save game", self._save_game),
+                ("Help", self._show_help),
+            ]
+        self.actions.set_buttons(buttons)
+
+    def _enter_world_map(self) -> None:
+        if self.streaming or self.modal.visible:
+            return
+        self.mode = MODE_WORLD_MAP
+        self.text_input.set_active(False)
+        self.world_map_scene.set_active_locations(self.world.active_location_ids())
+        self._refresh_action_buttons()
+        self.toasts.push("You step out into the lane.", 2.2)
+
+    def _enter_location(self, location_id: str) -> None:
+        if self.streaming or self.modal.visible:
+            return
+        self.mode = MODE_LOCATION
+        self.current_location_id = location_id
+        self.location_scene.set_location(location_id)
+        self.location_scene.set_quests(self.world.quests_at(location_id))
+        self.text_input.set_active(False)
+        self._refresh_action_buttons()
+        loc = get_location(location_id)
+        self.toasts.push(f"You arrive at {loc['name']}.", 2.2)
+
+    def _return_to_tavern(self) -> None:
+        if self.streaming:
+            return
+        self.mode = MODE_TAVERN
+        self.current_location_id = None
+        if self.current_npc is not None and not self.modal.visible:
+            self.text_input.set_active(True)
+        self._refresh_action_buttons()
 
     # ------------------------------------------------------------------
     # Per-frame: drain the worker queue
@@ -591,11 +699,15 @@ class Game:
                 self._on_haggle_result(ev)
             elif isinstance(ev, QuestResultEvent):
                 self._on_quest_result(ev)
+            elif isinstance(ev, FoundResultEvent):
+                self._on_found_result(ev)
             elif isinstance(ev, ErrorEvent):
                 self.dialogue.finalize_streaming()
                 self.streaming = False
-                self.text_input.set_active(True)
+                if self.mode == MODE_TAVERN:
+                    self.text_input.set_active(True)
                 self.toasts.push(f"LLM error: {ev.message}", WARN)
+                self._pending_found_quest = None
                 if self.demo_mode:
                     self._demo_step_pending = False
 
@@ -639,9 +751,11 @@ class Game:
         self.streaming = False
         self.text_input.set_active(True)
         q = ev.quest
+        loc = get_location(q.location)
         self.dialogue.add(
             self.current_npc.name,
-            f"{q.summary} (Reward: {q.reward_gold}g, danger: {q.danger})",
+            f"{q.summary} (Reward: {q.reward_gold}g, danger: {q.danger}; "
+            f"try {loc['name']})",
         )
         self.world.add_active_quest(
             {
@@ -650,12 +764,46 @@ class Game:
                 "target": q.target,
                 "reward_gold": q.reward_gold,
                 "danger": q.danger,
+                "location": q.location,
+                "hotspot": q.hotspot,
                 "from_persona": self.current_npc.id,
             }
         )
         self.world.save()
         self.sfx.play("quest")
         self.toasts.push(f"New quest: {q.title}", HIGHLIGHT)
+        self._refresh_action_buttons()
+        if not ev.ok:
+            self.toasts.push("(quest response degraded)", WARN)
+
+    def _on_found_result(self, ev: FoundResultEvent) -> None:
+        """Resolve the found-it micro-call: deposit reward, set up return."""
+        self.streaming = False
+        quest = self._pending_found_quest
+        self._pending_found_quest = None
+        if quest is None:
+            return
+        line = ev.found.line.strip()
+        speaker = "Narrator"
+        # Append to dialogue history so the player sees continuity when
+        # they get back to the bar.
+        self.dialogue.add(speaker, line)
+        # Mark the quest complete + reward + reputation tick.
+        done = self.world.complete_quest(quest.get("title", ""))
+        if done is not None:
+            reward = int(done.get("reward_gold", 0))
+            self.world.adjust_reputation("townsfolk", 1)
+            self.world.save()
+            self.sfx.play("quest")
+            self.toasts.push(
+                f"Quest complete: {done.get('title', '???')} (+{reward}g)",
+                GOOD,
+            )
+        if not ev.ok:
+            self.toasts.push("(found-line degraded)", WARN)
+        # Brief celebration pause, then auto-return to the bar.
+        self._return_to_tavern_at = time.monotonic() + 1.6
+        self._refresh_action_buttons()
         if not ev.ok:
             self.toasts.push("(quest response degraded)", WARN)
 
@@ -830,6 +978,121 @@ class Game:
         pygame.event.post(pygame.event.Event(pygame.QUIT))
 
     # ------------------------------------------------------------------
+    # Per-mode event routing + drawing
+    # ------------------------------------------------------------------
+    def _handle_scene_event(self, event: pygame.event.Event) -> None:
+        if self.mode == MODE_TAVERN:
+            # Dialogue scroll bar / wheel only matter in the bar.
+            self.dialogue.handle_event(event)
+            return
+        if self.streaming:
+            return
+        if self.mode == MODE_WORLD_MAP:
+            location_id = self.world_map_scene.handle_event(event)
+            if location_id is not None:
+                self._enter_location(location_id)
+            return
+        if self.mode == MODE_LOCATION:
+            hotspot_id = self.location_scene.handle_event(event)
+            if hotspot_id is None or event.type != pygame.MOUSEBUTTONDOWN:
+                return
+            self._on_hotspot_click(hotspot_id)
+
+    def _draw_tavern_frame(self) -> None:
+        self.scene.draw(self.screen)
+        self.dialogue.draw(self.screen)
+        self.text_input.draw(self.screen)
+
+    def _draw_world_map_frame(self) -> None:
+        # Refresh active highlights each frame in case quests changed.
+        self.world_map_scene.set_active_locations(self.world.active_location_ids())
+        self.world_map_scene.draw(self.screen)
+
+    def _draw_location_frame(self) -> None:
+        if self.current_location_id is None:
+            return
+        self.location_scene.set_quests(self.world.quests_at(self.current_location_id))
+        self.location_scene.draw(self.screen)
+
+    # ------------------------------------------------------------------
+    # Hotspot click -> found-it flow / wrong-click feedback
+    # ------------------------------------------------------------------
+    def _on_hotspot_click(self, hotspot_id: str) -> None:
+        if self.current_location_id is None or self.streaming:
+            return
+        # Is this hotspot the target of any active quest at this location?
+        match = None
+        for q in self.world.quests_at(self.current_location_id):
+            if q.get("hotspot") == hotspot_id:
+                match = q
+                break
+        if match is None:
+            self._handle_wrong_hotspot(hotspot_id)
+            return
+        self._start_found_flow(match, hotspot_id)
+
+    def _handle_wrong_hotspot(self, hotspot_id: str) -> None:
+        loc = get_location(self.current_location_id or "")
+        hotspot = get_hotspot(self.current_location_id or "", hotspot_id) or {
+            "name": "this spot"
+        }
+        msg = f"Nothing useful here. (You searched the {hotspot['name']}.)"
+        self.location_scene.show_note(msg)
+
+    def _start_found_flow(self, quest: dict[str, Any], hotspot_id: str) -> None:
+        self.streaming = True
+        self._pending_found_quest = quest
+        loc = get_location(self.current_location_id or "")
+        hotspot = get_hotspot(self.current_location_id or "", hotspot_id) or {}
+        item_phrase = extract_item_phrase(quest.get("summary", ""))
+        persona = (
+            self.current_npc.persona
+            if self.current_npc is not None
+            else {"name": "An old patron", "role": "wanderer", "voice_traits": ["soft-spoken"]}
+        )
+        threading.Thread(
+            target=self._found_worker,
+            args=(
+                persona,
+                quest,
+                loc.get("name", "the place"),
+                hotspot.get("name", "the spot"),
+                item_phrase,
+            ),
+            daemon=True,
+        ).start()
+
+    def _found_worker(
+        self,
+        persona: dict[str, Any],
+        quest: dict[str, Any],
+        location_name: str,
+        hotspot_name: str,
+        item_phrase: str,
+    ) -> None:
+        messages = P.build_found_messages(
+            persona,
+            self.world.to_prompt_dict(),
+            quest,
+            location_name=location_name,
+            hotspot_name=hotspot_name,
+            item_phrase=item_phrase,
+        )
+        try:
+            found, ok = call_with_retry(
+                lambda: self.client.json_call(messages, schema_hint="FoundLine"),
+                parse_found_line,
+                fallback=DEGRADED_FOUND,
+            )
+            self.event_q.put(
+                FoundResultEvent(
+                    quest_title=quest.get("title", ""), found=found, ok=ok
+                )
+            )
+        except OllamaError as exc:
+            self.event_q.put(ErrorEvent(message=str(exc)))
+
+    # ------------------------------------------------------------------
     # Main loop
     # ------------------------------------------------------------------
     def run(self) -> int:
@@ -857,10 +1120,11 @@ class Game:
                         if not self.text_input.text:
                             self.banner.toggle()
                             continue
-                        else:
+                        elif self.mode == MODE_TAVERN:
                             self.text_input.handle_event(event)
                     else:
-                        if not self.modal.visible:
+                        # Text input is only meaningful in tavern mode.
+                        if not self.modal.visible and self.mode == MODE_TAVERN:
                             self.text_input.handle_event(event)
                 elif event.type == pygame.USEREVENT + 1:
                     # Demo: submit the scripted line.
@@ -871,14 +1135,21 @@ class Game:
                         self._on_player_submit(text)
                 else:
                     # Modal eats events first. If it's visible at all, the
-                    # action panel and dialogue scroll are locked out so
+                    # action panel and exploration scenes are locked out so
                     # clicks outside the modal don't accidentally fire.
                     self.modal.handle_event(event)
                     if not self.modal.visible:
                         if not self.actions.handle_event(event):
-                            self.dialogue.handle_event(event)
+                            self._handle_scene_event(event)
 
             self._drain_events()
+            # Auto-return to the tavern after a celebrated quest completion.
+            if (
+                self._return_to_tavern_at is not None
+                and time.monotonic() >= self._return_to_tavern_at
+            ):
+                self._return_to_tavern_at = None
+                self._return_to_tavern()
             # Reflect streaming state in the side panel so buttons are
             # clearly unavailable while the LLM is busy.
             self.actions.set_enabled_all(not self.streaming)
@@ -889,7 +1160,12 @@ class Game:
             self.text_input.update(dt)
 
             self.screen.fill((0, 0, 0))
-            self.scene.draw(self.screen)
+            if self.mode == MODE_TAVERN:
+                self._draw_tavern_frame()
+            elif self.mode == MODE_WORLD_MAP:
+                self._draw_world_map_frame()
+            else:
+                self._draw_location_frame()
             self.banner.draw(self.screen, self.client.config.model)
             self.status_bar.draw(
                 self.screen,
@@ -899,8 +1175,6 @@ class Game:
                 gossip_count=len(self.world.gossip_heard),
                 model_name=self.client.config.model,
             )
-            self.dialogue.draw(self.screen)
-            self.text_input.draw(self.screen)
             self.actions.draw(self.screen)
             self.toasts.draw(self.screen)
             self.modal.draw(self.screen)

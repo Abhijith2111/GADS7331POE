@@ -102,6 +102,24 @@ This:
   last reply / banner toggle), **F5** next customer, **T** hide the AI
   notice, **Esc** quit.
 
+### Leaving the bar (quest exploration)
+
+When you accept a quest, **"Leave the bar"** appears in the action panel.
+That opens a world map of four hand-authored locations — *The Old Mines,
+Town Square, The Outskirts,* and the *Castle Hall* — each with four
+search hotspots. The location holding your quest target glows.
+
+Click a location card to walk into it. Pulsing dots are searchable
+hotspots: click the right one and the LLM writes a single short "you
+found it" line, the reward is deposited, and the game whisks you back
+to the bar. Wrong clicks just print "Nothing useful here." and cost
+nothing.
+
+The location *and* the hotspot are chosen by the LLM at quest-generation
+time (validated/clamped server-side so a wandering model can never
+make a quest unreachable). All the location and hotspot art is
+procedural — no external assets needed.
+
 ---
 
 ## Project structure

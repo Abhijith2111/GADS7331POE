@@ -19,6 +19,7 @@ from src.llm.parsers import (
     HaggleDecision,
     Quest,
     call_with_retry,
+    extract_item_phrase,
     extract_json_object,
     parse_haggle,
     parse_quest,
@@ -163,6 +164,94 @@ class TestParseQuest:
         )
         with pytest.raises(ValidationError):
             parse_quest(raw)
+
+
+# ---------------------------------------------------------------------------
+# Quest location/hotspot validators
+# ---------------------------------------------------------------------------
+class TestParseQuestLocation:
+    """Exploration mode adds two clamped fields. These tests pin the
+    behaviour: a wandering model can never make a quest unreachable,
+    and an LLM that forgets the fields still produces a playable quest.
+    """
+
+    def _base_payload(self, **overrides):
+        payload = {
+            "title": "Find the Lost Lute",
+            "summary": "Find my lost lute.",
+            "target": "Pip's lute",
+            "reward_gold": 12,
+            "danger": "low",
+            "location": "outskirts",
+            "hotspot": "creek_bed",
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_valid_location_and_hotspot(self) -> None:
+        raw = json.dumps(self._base_payload(location="mines", hotspot="main_shaft"))
+        q = parse_quest(raw)
+        assert q.location == "mines"
+        assert q.hotspot == "main_shaft"
+
+    def test_hotspot_from_wrong_location_clamps(self) -> None:
+        # "main_shaft" only exists in the mines, not the castle hall.
+        raw = json.dumps(
+            self._base_payload(location="castle_hall", hotspot="main_shaft")
+        )
+        q = parse_quest(raw)
+        assert q.location == "castle_hall"
+        # Falls back to the first hotspot of the chosen location.
+        assert q.hotspot == "dais"
+
+    def test_unknown_location_falls_back_to_default(self) -> None:
+        raw = json.dumps(self._base_payload(location="atlantis", hotspot="anywhere"))
+        q = parse_quest(raw)
+        assert q.location == "outskirts"
+        # Clamped to that location's first hotspot.
+        assert q.hotspot == "broken_bridge"
+
+    def test_missing_fields_fall_back_to_defaults(self) -> None:
+        payload = self._base_payload()
+        payload.pop("location")
+        payload.pop("hotspot")
+        q = parse_quest(json.dumps(payload))
+        assert q.location == "outskirts"
+        assert q.hotspot == "creek_bed"
+
+    def test_location_normalised_to_snake_case(self) -> None:
+        raw = json.dumps(
+            self._base_payload(location="Castle Hall", hotspot="dais")
+        )
+        q = parse_quest(raw)
+        assert q.location == "castle_hall"
+
+
+# ---------------------------------------------------------------------------
+# extract_item_phrase
+# ---------------------------------------------------------------------------
+class TestExtractItemPhrase:
+    def test_simple_find(self) -> None:
+        assert extract_item_phrase("Find my lute, will you?") == "the lute"
+
+    def test_recover_phrase(self) -> None:
+        out = extract_item_phrase("Recover the broken sword from the bandit camp.")
+        assert out == "the broken sword"
+
+    def test_fetch_with_article(self) -> None:
+        assert extract_item_phrase("Fetch a barrel of ale") == "the barrel of ale"
+
+    def test_falls_back_when_no_verb(self) -> None:
+        assert extract_item_phrase("Just a friendly chat about the weather.") == "the item"
+
+    def test_empty_summary(self) -> None:
+        assert extract_item_phrase("") == "the item"
+
+    def test_two_word_verb(self) -> None:
+        assert (
+            extract_item_phrase("Could you bring back the old ring?")
+            == "the old ring"
+        )
 
 
 # ---------------------------------------------------------------------------

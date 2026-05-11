@@ -19,7 +19,14 @@ import json
 import re
 from typing import Any, Callable
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+
+from src.game.world_map_data import (
+    DEFAULT_HOTSPOT_ID,
+    DEFAULT_LOCATION_ID,
+    hotspot_ids,
+    location_ids,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -43,14 +50,28 @@ class HaggleDecision(BaseModel):
         return v
 
 
+class FoundLine(BaseModel):
+    """Tiny structured return from the post-quest "you found it" prompt."""
+
+    line: str = Field(min_length=1, max_length=300)
+
+
 class Quest(BaseModel):
-    """The shape returned by the quest-generation JSON-mode prompt."""
+    """The shape returned by the quest-generation JSON-mode prompt.
+
+    ``location`` and ``hotspot`` were added to support the exploration
+    mode: the LLM decides *where in the world* the player will find the
+    target. Both fields are clamped to known values (see validators) so
+    a wandering model can never produce an unreachable quest.
+    """
 
     title: str = Field(min_length=1, max_length=80)
     summary: str = Field(min_length=1, max_length=400)
     target: str = Field(min_length=1, max_length=120)
     reward_gold: int = Field(ge=5, le=40)
     danger: str
+    location: str = DEFAULT_LOCATION_ID
+    hotspot: str = DEFAULT_HOTSPOT_ID
 
     @field_validator("danger")
     @classmethod
@@ -59,6 +80,22 @@ class Quest(BaseModel):
         if v not in {"low", "medium", "high"}:
             return "low"
         return v
+
+    @field_validator("location")
+    @classmethod
+    def _location_known(cls, v: str) -> str:
+        v = v.strip().lower().replace(" ", "_")
+        if v not in location_ids():
+            return DEFAULT_LOCATION_ID
+        return v
+
+    @model_validator(mode="after")
+    def _hotspot_in_location(self) -> "Quest":
+        valid = hotspot_ids(self.location)
+        if self.hotspot not in valid:
+            # Clamp to the first hotspot of the chosen location.
+            object.__setattr__(self, "hotspot", valid[0])
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +179,11 @@ def parse_quest(raw: str) -> Quest:
     return Quest.model_validate(data)
 
 
+def parse_found_line(raw: str) -> FoundLine:
+    data = extract_json_object(raw)
+    return FoundLine.model_validate(data)
+
+
 # ---------------------------------------------------------------------------
 # Retry / degrade harness
 # ---------------------------------------------------------------------------
@@ -193,4 +235,52 @@ DEGRADED_QUEST = Quest(
     target="the road outside town",
     reward_gold=10,
     danger="low",
+    location=DEFAULT_LOCATION_ID,
+    hotspot=DEFAULT_HOTSPOT_ID,
 )
+
+DEGRADED_FOUND = FoundLine(line="You find what they asked for, tucked away.")
+
+
+# ---------------------------------------------------------------------------
+# Quest target -> item phrase extraction
+# ---------------------------------------------------------------------------
+_ITEM_VERBS = (
+    "find",
+    "fetch",
+    "recover",
+    "retrieve",
+    "bring back",
+    "look for",
+    "search for",
+)
+
+
+def extract_item_phrase(quest_summary: str) -> str:
+    """Pick a short noun-phrase describing the quest item.
+
+    Used by the "found it" prompt so the LLM has a concrete thing to
+    mention. Falls back to ``"the item"`` if nothing matches; the prompt
+    handles that gracefully.
+    """
+    text = quest_summary.strip()
+    if not text:
+        return "the item"
+    lowered = text.lower()
+    for verb in _ITEM_VERBS:
+        idx = lowered.find(verb)
+        if idx == -1:
+            continue
+        tail = text[idx + len(verb):].strip()
+        # Strip leading articles to land on a clean noun.
+        m = re.match(r"(my|the|a|an)\s+", tail, re.IGNORECASE)
+        if m:
+            tail = tail[m.end():]
+        # Cut at the first sentence-ending punctuation or conjunction.
+        cut = re.search(r"[,.;!\?]| for | from | in | at | near | so ", tail)
+        if cut:
+            tail = tail[: cut.start()]
+        tail = tail.strip().strip('"')
+        if 2 < len(tail) < 80:
+            return f"the {tail}"
+    return "the item"

@@ -34,9 +34,14 @@ small-talk — except the small talk genuinely is fresh every play.
 4. **Gossip that travels.** Lines that read like rumours are extracted
    from the model's replies and re-injected into later customers'
    prompts as "what's already going round town", so the world remembers.
-5. **One-off quests.** Customers occasionally offer schema-constrained
-   fetch-or-rumour errands the player can accept; rewards land in the
-   gold counter.
+5. **One-off quests with a world to walk.** Customers occasionally
+   offer schema-constrained fetch-or-rumour errands the player can
+   accept. Once accepted, the player can leave the bar to a world map
+   of four hand-authored locations and search a handful of hotspots
+   per location for the target item. The LLM picks the location and
+   hotspot when the quest is generated, and writes a single
+   in-character "you found it" line on success. Reward lands in the
+   gold counter and the player is whisked back to the bar.
 
 ## Where the LLM lives in the design
 
@@ -50,6 +55,9 @@ small-talk — except the small talk genuinely is fresh every play.
 | Gossip lines     | no                | yes              |
 | Quest titles & summaries | no        | yes              |
 | Quest reward calculation | clamped to [5,40] | yes (within range) |
+| Quest placement (location + hotspot) | clamped to known table | yes (chosen from a list) |
+| World-map / hotspot art | yes (procedural) | no               |
+| "You found it" narration | no        | yes (1-2 sentences, JSON-mode) |
 
 The LLM never decides what the player owns, what items exist, or how
 much gold the player has. It decides what is *said* and the soft beats

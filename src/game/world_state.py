@@ -18,6 +18,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .world_map_data import (
+    DEFAULT_HOTSPOT_ID,
+    DEFAULT_LOCATION_ID,
+    hotspot_ids,
+    location_ids,
+)
+
 
 DEFAULT_PATH = Path("data") / "savegame.json"
 
@@ -57,12 +64,17 @@ class WorldState:
         rep = data.get("reputation", {}) or {}
         for k in REPUTATION_KEYS:
             rep.setdefault(k, 0)
+        # Forward-migrate older saves that pre-date exploration mode by
+        # filling in default location/hotspot on any active quest that
+        # lacks them. Without this, quests written by older builds would
+        # be impossible to complete in the new exploration flow.
+        active = [_normalise_quest(q) for q in data.get("active_quests", [])]
         return cls(
             path=path,
             gold=int(data.get("gold", 50)),
             reputation=rep,
             gossip_heard=list(data.get("gossip_heard", [])),
-            active_quests=list(data.get("active_quests", [])),
+            active_quests=active,
             completed_quests=list(data.get("completed_quests", [])),
             served_personas=list(data.get("served_personas", [])),
         )
@@ -111,7 +123,15 @@ class WorldState:
             self.served_personas.append(persona_id)
 
     def add_active_quest(self, quest: dict[str, Any]) -> None:
-        self.active_quests.append(quest)
+        self.active_quests.append(_normalise_quest(quest))
+
+    def quests_at(self, location_id: str) -> list[dict[str, Any]]:
+        """Active quests whose target hotspot is in ``location_id``."""
+        return [q for q in self.active_quests if q.get("location") == location_id]
+
+    def active_location_ids(self) -> set[str]:
+        """Set of location ids that currently have at least one active quest."""
+        return {q.get("location", DEFAULT_LOCATION_ID) for q in self.active_quests}
 
     def complete_quest(self, title: str) -> dict[str, Any] | None:
         for i, quest in enumerate(self.active_quests):
@@ -133,3 +153,26 @@ class WorldState:
             "gossip_heard": list(self.gossip_heard),
             "active_quests": [q.get("title", "") for q in self.active_quests],
         }
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def _normalise_quest(quest: dict[str, Any]) -> dict[str, Any]:
+    """Ensure a quest dict has valid location/hotspot fields.
+
+    Used both when loading older saves and when accepting a freshly
+    parsed Quest, so the in-memory shape is always usable by the
+    exploration scenes.
+    """
+    out = dict(quest)
+    location = out.get("location", DEFAULT_LOCATION_ID)
+    if location not in location_ids():
+        location = DEFAULT_LOCATION_ID
+    out["location"] = location
+    valid = hotspot_ids(location)
+    hotspot = out.get("hotspot", DEFAULT_HOTSPOT_ID)
+    if hotspot not in valid:
+        hotspot = valid[0]
+    out["hotspot"] = hotspot
+    return out

@@ -20,6 +20,8 @@ from __future__ import annotations
 import json
 from typing import Any, Iterable
 
+from src.game.world_map_data import render_locations_for_prompt
+
 # Maximum number of past turns kept in the chat path. Older turns are
 # dropped, but the system prompt keeps the persona pinned so the NPC's
 # voice stays stable.
@@ -184,7 +186,9 @@ asks the tavern keeper to take on. Reply with ONLY a JSON object:
   "summary": string,      // one or two sentences, in-character ask
   "target": string,       // a place, person, or object the keeper must reach
   "reward_gold": integer, // 5..40, scaled to difficulty
-  "danger": "low"|"medium"|"high"
+  "danger": "low"|"medium"|"high",
+  "location": string,     // one of the location ids listed below
+  "hotspot": string       // one of THAT location's hotspot ids
 }
 
 Rules:
@@ -192,6 +196,10 @@ Rules:
 - Stay in the persona's voice in 'summary'.
 - Never reference modern objects or real-world locations.
 - reward_gold must be a whole integer in [5, 40].
+- 'location' must be one of the ids in the Locations table below.
+- 'hotspot' MUST be one of the hotspot ids listed under that location.
+- Pick a location/hotspot pair that fits the narrative target -- if the
+  target is a missing pickaxe, the mines fit better than the castle.
 """
 
 
@@ -202,11 +210,63 @@ def build_quest_messages(
     system = (
         f"{QUEST_RULES}\n"
         f"--- Persona ---\n{_persona_card(persona)}\n\n"
-        f"--- World state ---\n{_world_state_block(world_state)}\n"
+        f"--- World state ---\n{_world_state_block(world_state)}\n\n"
+        f"--- Locations available in this game ---\n"
+        f"{render_locations_for_prompt()}\n"
     )
     user = (
         "Generate a single quest the customer asks the tavern keeper to do, "
-        "as JSON only."
+        "as JSON only. Remember to fill in 'location' and 'hotspot' from "
+        "the table above."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Found-it path (JSON-mode, called once per successful quest)
+# ---------------------------------------------------------------------------
+FOUND_RULES = """You write ONE short narrative line describing the moment
+the tavern keeper finds the item the customer asked for. Reply with ONLY
+a JSON object:
+
+{
+  "line": string   // 1-2 sentences, max 40 words, second-person voice
+}
+
+Rules:
+- Speak to the keeper as the narrator: "You spot...", "You ease open...".
+- Mention the item phrase given below at least once.
+- Mention the location and the specific spot in the same line.
+- Do NOT mention being an AI, do NOT use stage directions.
+- No prose outside the JSON object.
+"""
+
+
+def build_found_messages(
+    persona: dict[str, Any],
+    world_state: dict[str, Any],
+    quest: dict[str, Any],
+    location_name: str,
+    hotspot_name: str,
+    item_phrase: str,
+) -> list[dict[str, str]]:
+    """Build the JSON-mode prompt for the 'you found it' beat."""
+    system = (
+        f"{FOUND_RULES}\n"
+        f"--- Quest-giver persona ---\n{_persona_card(persona)}\n\n"
+        f"--- World state ---\n{_world_state_block(world_state)}\n\n"
+        f"--- Quest in progress ---\n"
+        f"Title: {quest.get('title', 'A Quiet Errand')}\n"
+        f"Summary: {quest.get('summary', '')}\n"
+        f"Target as the customer described it: {quest.get('target', '')}\n"
+    )
+    user = (
+        f"The keeper has just reached the {hotspot_name} at {location_name} "
+        f"and located {item_phrase}. Write the in-the-moment narration as "
+        "JSON only."
     )
     return [
         {"role": "system", "content": system},

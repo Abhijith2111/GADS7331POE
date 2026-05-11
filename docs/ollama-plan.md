@@ -42,6 +42,7 @@ the background:
 | Player types a chat line + Enter   | chat            | < 2 s first token, < 6 s total | yes |
 | Player runs `/sell <item> <price>` | JSON (haggle)   | < 4 s end-to-end | no       |
 | Player runs `/quest`               | JSON (quest)    | < 4 s end-to-end | no       |
+| Player clicks the right hotspot at a location | JSON (found-it) | < 3 s end-to-end | no |
 | Player clicks "Regenerate" in F2   | chat (replay)   | same as chat   | yes       |
 
 There is **no idle-time inference**, no ambient chatter, no NPC
@@ -79,8 +80,10 @@ flowchart LR
     Ollama -->|"streamed tokens / JSON object"| Client
     Client --> Parser["parsers.py: extract + validate + clamp"]
     Parser --> Game
-    Game --> UI["dialogue box / haggle toast / quest sidebar"]
+    Game --> UI["dialogue box / haggle toast / quest sidebar / found-it line"]
     Game --> WorldState
+    Game --> WorldMap["world_map.py (4 locations x 4 hotspots)"]
+    WorldMap --> Builder
 ```
 
 Key points the marker can see on tape:
@@ -174,7 +177,9 @@ budget_gold]`. Acceptances above the persona's budget are demoted to
 
 ### 4.3 Quest prompt (JSON-mode)
 
-Same persona + world-state preamble. Output:
+Same persona + world-state preamble plus an *Available locations* block
+listing every location id, name, blurb, and that location's four
+hotspot ids. Output:
 
 ```json
 {
@@ -182,11 +187,34 @@ Same persona + world-state preamble. Output:
   "summary": "...",
   "target": "the eastern bridge",
   "reward_gold": 12,
-  "danger": "low"
+  "danger": "low",
+  "location": "outskirts",
+  "hotspot": "broken_bridge"
 }
 ```
 
 `reward_gold` is hard-bounded `[5, 40]` and `danger` is enum-clamped.
+`location` is clamped to the set of known location ids (unknown values
+fall back to `outskirts`); `hotspot` is clamped to that location's
+table (a hotspot id from a different location is silently rewritten to
+the chosen location's first hotspot). This pair is what drives the
+exploration-mode map: the player walks to that location and the right
+hotspot is the one that completes the quest.
+
+### 4.4 Found-it prompt (JSON-mode)
+
+Fired once, when the player clicks the correct hotspot. Tiny return:
+
+```json
+{ "line": "You ease open the rusted miner's cart and there it lies." }
+```
+
+The prompt receives the persona (the quest-giver), the world state, the
+quest summary, the location and hotspot *names* (not ids), and a noun
+phrase extracted from the quest summary so the model has a concrete
+thing to mention ("the lost lute", "the broken sword", etc.). A
+parse failure falls back to a canned line so the player is never
+soft-locked at the end of a quest.
 
 ---
 
