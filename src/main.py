@@ -652,7 +652,7 @@ class Game:
         self.text_input.set_active(False)
         self.world_map_scene.set_active_locations(self.world.active_location_ids())
         self._refresh_action_buttons()
-        self.toasts.push("You step out into the lane.", 2.2)
+        self.toasts.push("You step out into the lane.", HIGHLIGHT)
 
     def _enter_location(self, location_id: str) -> None:
         if self.streaming or self.modal.visible:
@@ -664,7 +664,7 @@ class Game:
         self.text_input.set_active(False)
         self._refresh_action_buttons()
         loc = get_location(location_id)
-        self.toasts.push(f"You arrive at {loc['name']}.", 2.2)
+        self.toasts.push(f"You arrive at {loc['name']}.", HIGHLIGHT)
 
     def _return_to_tavern(self) -> None:
         if self.streaming:
