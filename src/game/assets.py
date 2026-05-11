@@ -131,14 +131,15 @@ def _generate_silhouette(persona: dict[str, Any]) -> pygame.Surface:
         (w * 0.34, h * 0.18, w * 0.32, h * 0.22),
     )
 
-    # Subtle highlight strip down the cloak.
+    # Subtle highlight strip down the cloak. Starts below the chin so
+    # it never crosses the face.
     highlight = (
         min(255, accent[0] + 30),
         min(255, accent[1] + 30),
         min(255, accent[2] + 30),
         180,
     )
-    pygame.draw.line(surf, highlight, (w * 0.5, h * 0.22), (w * 0.5, h * 0.92), 6)
+    pygame.draw.line(surf, highlight, (w * 0.5, h * 0.44), (w * 0.5, h * 0.92), 6)
 
     return surf
 
