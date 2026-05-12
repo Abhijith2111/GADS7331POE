@@ -50,6 +50,7 @@ from src.game.ui import (
     TransparencyBanner,
     wrap_text,
 )
+from src.game.market import MARKET_OFFERS
 from src.game.world_map import LocationScene, WorldMapScene
 from src.game.world_map_data import get_hotspot, get_location
 from src.game.world_state import WorldState
@@ -450,6 +451,7 @@ class Game:
             "  - Type a message and press Enter to talk to the customer.\n"
             "  - Use the buttons on the right for actions:\n"
             "      Show stock     - the bar's menu and prices\n"
+            "      Market         - buy wholesale ale, wine, provisions, fuel\n"
             "      Sell item...   - pick an item, set a price, and haggle\n"
             "      Ask for work   - see if the customer has a quest\n"
             "      View quests    - your active and completed quests\n"
@@ -460,9 +462,10 @@ class Game:
             "                       the rumour for free (+townsfolk).\n"
             "      Next customer  - send this one away, bring in the next\n"
             "      Save game      - persist the world state to disk\n"
-            "  - Leaving the bar: once you have a quest, the side panel\n"
-            "    shows 'Leave the bar'. Pick a location, then click the\n"
-            "    glowing hotspot to find the item. Wrong clicks just\n"
+            "  - Leaving the bar: use 'Leave the bar' on the side panel\n"
+            "    anytime. On the world map pick a region; inside a location,\n"
+            "    click the glowing hotspot when you're on a quest to find\n"
+            "    the item. Wrong clicks just\n"
             "    print 'Nothing useful here.' and cost you nothing.\n"
             "  - Hot-keys: F1 help, F2 settings, F5 next customer, T toggles\n"
             "    the AI banner, M mutes/unmutes background music, Esc quits.\n"
@@ -495,6 +498,112 @@ class Game:
             self.modal.hide,
         )
         self.modal.show("Stock", body, [close_btn])
+
+    def _supplies_status_line(self) -> str:
+        s = self.world.tavern_supplies
+        return (
+            f"A{s.get('ale_stock', 0)}·W{s.get('wine_stock', 0)}·"
+            f"F{s.get('provisions', 0)}·L{s.get('fuel', 0)}"
+        )
+
+    def _buy_market_stock(self, supply_key: str, add_qty: int, price: int) -> None:
+        if self.streaming:
+            return
+        if self.world.gold < price:
+            self.toasts.push("Not enough gold for that order.", WARN)
+            return
+        self.world.add_gold(-price)
+        self.world.add_tavern_supply(supply_key, add_qty)
+        self.world.save()
+        self.toasts.push("Wholesalers cart the goods to your cellar.", GOOD)
+        self._show_market_modal()
+
+    def _show_market_modal(self) -> None:
+        if self.streaming:
+            return
+        modal = self.modal
+        modal_rect = modal.rect
+        s = self.world.tavern_supplies
+
+        right_slot_w = 120
+        small_h = 30
+        text_max_width = max(80, modal_rect.width - 40 - right_slot_w - 8)
+        footer_max_width = max(80, modal_rect.width - 40)
+
+        body_top = (
+            modal_rect.top + 18 + modal.title_font.get_height() + 14
+        )
+        line_h = modal.body_font.get_height() + 4
+
+        body_lines: list[str] = []
+        buttons: list[Button] = []
+        y = body_top
+        bx = modal_rect.right - 20 - right_slot_w
+
+        intro = (
+            "Wholesalers in the town square deal in hard coin. "
+            "Your cellar and pantry right now:"
+        )
+        for line in wrap_text(intro, modal.body_font, footer_max_width):
+            body_lines.append(line)
+            y += line_h
+        body_lines.append("")
+        y += line_h
+        tallies = (
+            f"Ale {s.get('ale_stock', 0)}   Wine {s.get('wine_stock', 0)}   "
+            f"Provisions {s.get('provisions', 0)}   Fuel {s.get('fuel', 0)}"
+        )
+        for line in wrap_text(tallies, modal.body_font, footer_max_width):
+            body_lines.append(line)
+            y += line_h
+        body_lines.append("")
+        y += line_h
+
+        for offer in MARKET_OFFERS:
+            row_top = y
+            row_txt = (
+                f"• {offer.blurb} (+{offer.add_qty} at {offer.price_gold} gold)"
+            )
+            wrapped = wrap_text(row_txt, modal.body_font, text_max_width)
+            for line in wrapped:
+                body_lines.append(line)
+                y += line_h
+            buttons.append(
+                Button(
+                    f"{offer.price_gold}g",
+                    pygame.Rect(bx, row_top, right_slot_w, small_h),
+                    on_click=(
+                        lambda k=offer.supply_key,
+                        a=offer.add_qty,
+                        p=offer.price_gold: self._buy_market_stock(k, a, p)
+                    ),
+                )
+            )
+            body_lines.append("")
+            y += line_h
+
+        body_lines.extend(
+            wrap_text(
+                "(Stock levels are for your ledgers; they persist in the save file.)",
+                modal.body_font,
+                footer_max_width,
+            )
+        )
+
+        buttons.append(
+            Button(
+                "Close",
+                pygame.Rect(
+                    modal_rect.right - 140, modal_rect.bottom - 56, 120, 38
+                ),
+                modal.hide,
+            )
+        )
+
+        modal.title = "Market — wholesale"
+        modal.body_lines = body_lines
+        modal.buttons = buttons
+        modal.visible = True
 
     # ------------------------------------------------------------------
     # Journal modals: quests + gossip
@@ -601,7 +710,10 @@ class Game:
 
         right_slot_w = 220
         small_h = 26
-        text_max_width = modal_rect.width - 40 - right_slot_w - 16
+        # Text starts at rect.left + 20; keep a gap before the action column.
+        text_max_width = max(80, modal_rect.width - 40 - right_slot_w - 8)
+        # Footer lines span the full body (no per-row action column there).
+        footer_max_width = max(80, modal_rect.width - 40)
 
         body_top = (
             modal_rect.top
@@ -673,19 +785,33 @@ class Game:
             y += line_h
 
         if hidden > 0:
-            body_lines.append(f"({hidden} older rumour(s) not shown.)")
+            body_lines.extend(
+                wrap_text(
+                    f"({hidden} older rumour(s) not shown.)",
+                    modal.body_font,
+                    footer_max_width,
+                )
+            )
         if npc is None:
             body_lines.append("")
-            body_lines.append(
-                "(Seat a customer to sell them gossip or spread rumours.)"
+            body_lines.extend(
+                wrap_text(
+                    "(Seat a customer to sell them gossip or spread rumours.)",
+                    modal.body_font,
+                    footer_max_width,
+                )
             )
         elif not any(
             personas_mentioned_in_text(g, self.personas) for g in shown
         ):
             body_lines.append("")
-            body_lines.append(
-                "(These lines don't name anyone in your regulars yet — "
-                "keep chatting for juicier tips.)"
+            body_lines.extend(
+                wrap_text(
+                    "(These lines don't name anyone in your regulars yet — "
+                    "keep chatting for juicier tips.)",
+                    modal.body_font,
+                    footer_max_width,
+                )
             )
 
         buttons.append(
@@ -1243,22 +1369,21 @@ class Game:
 
         Called whenever the mode changes or the active-quest list
         changes so the player only ever sees buttons that make sense
-        right now (e.g. "Leave the bar" is hidden until they have a
-        quest, and the bar-only buttons disappear in exploration).
+        right now (bar-only vs exploration).
         """
         if self.mode == MODE_TAVERN:
             buttons = [
                 ("Show stock", self._show_stock_modal),
+                ("Market", self._show_market_modal),
                 ("Sell item...", self._open_sell_picker),
                 ("Ask for work", self._request_quest),
                 ("View quests", self._show_quests_modal),
                 ("View gossip", self._show_gossip_modal),
                 ("Next customer", self._next_customer),
                 ("Save game", self._save_game),
+                ("Leave the bar", self._enter_world_map),
+                ("Help", self._show_help),
             ]
-            if self.world.active_quests:
-                buttons.append(("Leave the bar", self._enter_world_map))
-            buttons.append(("Help", self._show_help))
         elif self.mode == MODE_WORLD_MAP:
             buttons = [
                 ("Back to bar", self._return_to_tavern),
@@ -1442,8 +1567,6 @@ class Game:
         # Brief celebration pause, then auto-return to the bar.
         self._return_to_tavern_at = time.monotonic() + 1.6
         self._refresh_action_buttons()
-        if not ev.ok:
-            self.toasts.push("(quest response degraded)", WARN)
 
     # ------------------------------------------------------------------
     # Gossip extraction
@@ -1832,6 +1955,7 @@ class Game:
                 active_quests=len(self.world.active_quests),
                 gossip_count=len(self.world.gossip_heard),
                 model_name=self.client.config.model,
+                supplies_summary=self._supplies_status_line(),
             )
             self.actions.draw(self.screen)
             self.toasts.draw(self.screen)

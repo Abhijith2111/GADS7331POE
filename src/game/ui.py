@@ -34,14 +34,44 @@ PANEL_BORDER = (120, 90, 50)
 WARN = (180, 60, 50)
 GOOD = (90, 140, 70)
 
+# Space above the modal bottom reserved for the Close row so body text clips
+# inside the brown frame (used by ModalPanel.draw).
+MODAL_BODY_BOTTOM_PAD = 70
+
 
 # ---------------------------------------------------------------------------
 # Word-wrapping helper
 # ---------------------------------------------------------------------------
+def _break_long_word(word: str, font: pygame.font.Font, max_width: int) -> list[str]:
+    """Split a token into fragments that each fit ``max_width`` when rendered."""
+    if max_width <= 0:
+        return [word] if word else []
+    if not word:
+        return []
+    out: list[str] = []
+    buf = ""
+    for ch in word:
+        trial = buf + ch
+        if font.size(trial)[0] <= max_width:
+            buf = trial
+        else:
+            if buf:
+                out.append(buf)
+            if font.size(ch)[0] <= max_width:
+                buf = ch
+            else:
+                out.append(ch)
+                buf = ""
+    if buf:
+        out.append(buf)
+    return out if out else [word]
+
+
 def wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:
     """Greedy word-wrap; returns a list of rendered lines."""
     if not text:
         return [""]
+    eff_w = max(1, max_width)
     lines: list[str] = []
     for paragraph in text.split("\n"):
         if not paragraph:
@@ -50,13 +80,18 @@ def wrap_text(text: str, font: pygame.font.Font, max_width: int) -> list[str]:
         words = paragraph.split(" ")
         current = ""
         for word in words:
-            candidate = f"{current} {word}".strip()
-            if font.size(candidate)[0] <= max_width:
-                current = candidate
-            else:
-                if current:
-                    lines.append(current)
-                current = word
+            if word == "":
+                continue
+            for piece in (
+                [word] if font.size(word)[0] <= eff_w else _break_long_word(word, font, eff_w)
+            ):
+                candidate = f"{current} {piece}".strip() if current else piece
+                if font.size(candidate)[0] <= eff_w:
+                    current = candidate
+                else:
+                    if current:
+                        lines.append(current)
+                    current = piece
         if current:
             lines.append(current)
     return lines
@@ -232,6 +267,7 @@ class StatusBar:
         active_quests: int,
         gossip_count: int,
         model_name: str,
+        supplies_summary: str = "",
     ) -> None:
         bg = pygame.Surface(self.rect.size, pygame.SRCALPHA)
         bg.fill((20, 14, 8, 220))
@@ -249,11 +285,13 @@ class StatusBar:
         surface.blit(rep_surf, (x, y + gold_surf.get_height() + 2))
 
         right_x = self.rect.right - 16
-        meta = self.small_font.render(
-            f"Quests: {active_quests}   Gossip: {gossip_count}   Model: {model_name}",
-            True,
-            INK_SOFT,
-        )
+        meta_parts = []
+        if supplies_summary:
+            meta_parts.append(f"Stock {supplies_summary}")
+        meta_parts.append(f"Quests: {active_quests}")
+        meta_parts.append(f"Gossip: {gossip_count}")
+        meta_parts.append(f"Model: {model_name}")
+        meta = self.small_font.render("   ".join(meta_parts), True, INK_SOFT)
         surface.blit(meta, (right_x - meta.get_width(), y + 6))
 
 
@@ -327,10 +365,41 @@ class ModalPanel:
         )
 
         y = self.rect.top + 18 + title_surf.get_height() + 14
-        for line in self.body_lines:
-            line_surf = self.body_font.render(line, True, PARCHMENT)
-            surface.blit(line_surf, (self.rect.left + 20, y))
-            y += line_surf.get_height() + 4
+        pad_x = 20
+        # Tightest body bottom: above any button that intrudes into the lower
+        # strip of the panel (Close row, etc.).
+        body_bottom = self.rect.bottom - 12
+        for b in self.buttons:
+            if b.rect.bottom > self.rect.bottom - MODAL_BODY_BOTTOM_PAD:
+                body_bottom = min(body_bottom, b.rect.top - 8)
+        body_bottom = max(body_bottom, y + self.body_font.get_height())
+
+        clip_rect = pygame.Rect(
+            self.rect.left + 8,
+            y,
+            self.rect.width - 16,
+            max(0, body_bottom - y),
+        )
+        previous_clip = surface.get_clip()
+        surface.set_clip(clip_rect)
+        truncated = False
+        try:
+            for line in self.body_lines:
+                line_surf = self.body_font.render(line, True, PARCHMENT)
+                line_h = line_surf.get_height() + 4
+                if y + line_surf.get_height() > body_bottom:
+                    truncated = True
+                    break
+                surface.blit(line_surf, (self.rect.left + pad_x, y))
+                y += line_h
+            if truncated:
+                hint = self.body_font.render(
+                    "(More text hidden — list is clipped.)", True, INK_SOFT
+                )
+                if y + hint.get_height() <= body_bottom:
+                    surface.blit(hint, (self.rect.left + pad_x, y))
+        finally:
+            surface.set_clip(previous_clip)
 
         for b in self.buttons:
             base = (90, 60, 30) if b.enabled else (50, 40, 30)

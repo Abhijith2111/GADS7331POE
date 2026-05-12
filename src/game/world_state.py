@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .market import DEFAULT_TAVERN_SUPPLIES
 from .world_map_data import (
     DEFAULT_HOTSPOT_ID,
     DEFAULT_LOCATION_ID,
@@ -44,6 +45,7 @@ class WorldState:
     path: Path = DEFAULT_PATH
     gold: int = 50
     reputation: dict[str, int] = field(default_factory=lambda: {k: 0 for k in REPUTATION_KEYS})
+    tavern_supplies: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_TAVERN_SUPPLIES))
     gossip_heard: list[str] = field(default_factory=list)
     active_quests: list[dict[str, Any]] = field(default_factory=list)
     completed_quests: list[dict[str, Any]] = field(default_factory=list)
@@ -69,10 +71,12 @@ class WorldState:
         # lacks them. Without this, quests written by older builds would
         # be impossible to complete in the new exploration flow.
         active = [_normalise_quest(q) for q in data.get("active_quests", [])]
+        supplies = _merge_tavern_supplies(data)
         return cls(
             path=path,
             gold=int(data.get("gold", 50)),
             reputation=rep,
+            tavern_supplies=supplies,
             gossip_heard=list(data.get("gossip_heard", [])),
             active_quests=active,
             completed_quests=list(data.get("completed_quests", [])),
@@ -84,6 +88,7 @@ class WorldState:
         payload = {
             "gold": self.gold,
             "reputation": self.reputation,
+            "tavern_supplies": self.tavern_supplies,
             "gossip_heard": self.gossip_heard,
             "active_quests": self.active_quests,
             "completed_quests": self.completed_quests,
@@ -98,6 +103,11 @@ class WorldState:
     # ------------------------------------------------------------------
     def add_gold(self, delta: int) -> None:
         self.gold = max(0, self.gold + int(delta))
+
+    def add_tavern_supply(self, key: str, qty: int) -> None:
+        if key not in self.tavern_supplies:
+            self.tavern_supplies[key] = 0
+        self.tavern_supplies[key] = max(0, self.tavern_supplies[key] + int(qty))
 
     def adjust_reputation(self, faction: str, delta: int) -> None:
         if faction not in self.reputation:
@@ -189,6 +199,20 @@ class WorldState:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+def _merge_tavern_supplies(data: dict[str, Any]) -> dict[str, int]:
+    """Fill in defaults for saves that pre-date ``tavern_supplies``."""
+    out = dict(DEFAULT_TAVERN_SUPPLIES)
+    raw = data.get("tavern_supplies")
+    if isinstance(raw, dict):
+        for k in out:
+            if k in raw:
+                try:
+                    out[k] = max(0, int(raw[k]))
+                except (TypeError, ValueError):
+                    pass
+    return out
+
+
 def _normalise_quest(quest: dict[str, Any]) -> dict[str, Any]:
     """Ensure a quest dict has valid location/hotspot fields.
 
