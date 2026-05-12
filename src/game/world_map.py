@@ -2,8 +2,9 @@
 
 Two pygame scenes used while the player is *out* of the tavern:
 
-- :class:`WorldMapScene` is a parchment-style overview of the four
-  locations, drawn as 2x2 cards. Cards with active quests glow.
+- :class:`WorldMapScene` is a parchment-style overview of quest regions
+  plus Wholesale Row, drawn as three cards on the first row and two on
+  the second. Cards with active quests glow.
 - :class:`LocationScene` is the in-location search view: procedural
   background by palette + pulsing hotspot dots + a small "Active
   quests" list in the corner.
@@ -23,7 +24,12 @@ from typing import Any
 import pygame
 
 from .assets import load_font
-from .world_map_data import LOCATIONS, get_location
+from .world_map_data import (
+    LOCATIONS,
+    WHOLESALE_MARKET_ID,
+    get_location,
+    map_destination_ids,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -35,6 +41,7 @@ PALETTES: dict[str, tuple[tuple[int, int, int], ...]] = {
     "warm":   ((60, 48, 38),  (110, 86, 56), (80, 60, 40),  (40, 30, 22),  (220, 180, 90)),
     "forest": ((28, 50, 60),  (48, 78, 70),  (40, 60, 38),  (18, 28, 18),  (200, 220, 140)),
     "cold":   ((28, 36, 54),  (50, 60, 86),  (38, 44, 56),  (18, 22, 32),  (160, 190, 230)),
+    "bazaar": ((72, 58, 48),  (118, 94, 72),  (88, 68, 50),  (48, 36, 28),  (220, 165, 85)),
 }
 
 
@@ -173,11 +180,30 @@ def _paint_castle_hall(surface: pygame.Surface, rect: pygame.Rect, palette: tupl
     pygame.draw.rect(surface, (60, 64, 80), (tx - 6, ty - 10, throne_w + 12, 12))
 
 
+def _paint_bazaar(surface: pygame.Surface, rect: pygame.Rect, palette: tuple) -> None:
+    accent = palette[4]
+    for x_frac in (0.12, 0.40, 0.68):
+        aw = int(rect.width * 0.24)
+        ax = rect.left + int(rect.width * x_frac)
+        ay = rect.top + int(rect.height * 0.40)
+        h = int(rect.height * 0.30)
+        pygame.draw.rect(surface, (110, 68, 48), (ax, ay, aw, h))
+        pygame.draw.polygon(
+            surface,
+            (160, 95, 55),
+            [(ax, ay), (ax + aw, ay), (ax + aw - 6, ay - 16), (ax + 6, ay - 16)],
+        )
+        pygame.draw.rect(surface, (*accent, 255), (ax + aw // 4, ay + h // 3, aw // 5, h // 4))
+    cob = rect.top + int(rect.height * 0.78)
+    pygame.draw.rect(surface, (52, 40, 30), (rect.left, cob, rect.width, rect.bottom - cob))
+
+
 PAINTERS = {
     "stone": _paint_mines,
     "warm": _paint_town,
     "forest": _paint_outskirts,
     "cold": _paint_castle_hall,
+    "bazaar": _paint_bazaar,
 }
 
 
@@ -201,7 +227,7 @@ def render_location_background(palette_id: str, size: tuple[int, int]) -> pygame
 
 
 # ---------------------------------------------------------------------------
-# WorldMapScene — 2x2 location cards
+# WorldMapScene — world overview cards (3 + 2 layout)
 # ---------------------------------------------------------------------------
 @dataclass
 class _MapCard:
@@ -217,6 +243,10 @@ class WorldMapScene:
     ``set_active_locations`` highlights cards that have quests pointing
     at them. ``hit_test(pos)`` returns the location id of the clicked
     card or ``None``.
+
+    Cards are laid out as three destinations on the first row and two on
+    the second (Wholesale Row last), so the map can include a service
+    stop without growing past the canvas.
     """
 
     def __init__(self, canvas_rect: pygame.Rect) -> None:
@@ -231,7 +261,8 @@ class WorldMapScene:
         self._active_set: set[str] = set()
 
     def _build_cards(self) -> None:
-        # 2 columns x 2 rows, centred in the canvas with margins.
+        # Row 1: three cards; row 2: two cards (centered). Order from
+        # ``map_destination_ids`` ends with Wholesale Row on row 2.
         pad = 24
         title_h = 80
         inner = pygame.Rect(
@@ -240,23 +271,44 @@ class WorldMapScene:
             self.rect.width - pad * 2,
             self.rect.height - pad * 2 - title_h,
         )
-        gap = 20
-        card_w = (inner.width - gap) // 2
-        card_h = (inner.height - gap) // 2
-        positions = [
-            (inner.left, inner.top),
-            (inner.left + card_w + gap, inner.top),
-            (inner.left, inner.top + card_h + gap),
-            (inner.left + card_w + gap, inner.top + card_h + gap),
-        ]
-        loc_ids = list(LOCATIONS.keys())
-        for (x, y), loc_id in zip(positions, loc_ids):
-            self.cards.append(_MapCard(location_id=loc_id, rect=pygame.Rect(x, y, card_w, card_h)))
+        gap = 16
+        loc_ids = map_destination_ids()
+        row1_ids = loc_ids[:3]
+        row2_ids = loc_ids[3:]
+        row1_h = max(120, int((inner.height - gap) * 0.52))
+        row2_h = inner.height - gap - row1_h
+
+        card_w1 = (inner.width - 2 * gap) // 3
+        row1_top = inner.top
+        for i, loc_id in enumerate(row1_ids):
+            x = inner.left + i * (card_w1 + gap)
+            self.cards.append(
+                _MapCard(
+                    location_id=loc_id,
+                    rect=pygame.Rect(x, row1_top, card_w1, row1_h),
+                )
+            )
+
+        card_w2 = (inner.width - gap) // 2
+        row2_top = inner.top + row1_h + gap
+        total_w2 = 2 * card_w2 + gap
+        x0 = inner.left + (inner.width - total_w2) // 2
+        for i, loc_id in enumerate(row2_ids):
+            x = x0 + i * (card_w2 + gap)
+            self.cards.append(
+                _MapCard(
+                    location_id=loc_id,
+                    rect=pygame.Rect(x, row2_top, card_w2, row2_h),
+                )
+            )
 
     def set_active_locations(self, locations: set[str]) -> None:
         self._active_set = set(locations)
         for c in self.cards:
-            c.glowing = c.location_id in self._active_set
+            c.glowing = (
+                c.location_id in self._active_set
+                and c.location_id != WHOLESALE_MARKET_ID
+            )
 
     def handle_event(self, event: pygame.event.Event) -> str | None:
         if event.type == pygame.MOUSEMOTION:
@@ -333,6 +385,10 @@ class WorldMapScene:
                 hint = self.small_font.render(
                     "Active quest here", True, (220, 180, 90)
                 )
+            elif c.location_id == WHOLESALE_MARKET_ID:
+                hint = self.small_font.render(
+                    "Buy tavern supplies", True, (200, 165, 100)
+                )
             else:
                 hint = self.small_font.render(
                     "Free exploration",
@@ -374,6 +430,16 @@ class WorldMapScene:
                 surface,
                 (180, 60, 70),
                 [(cx - 4, cy - 22), (cx + 18, cy - 14), (cx - 4, cy - 6)],
+            )
+        elif palette_id == "bazaar":
+            # Balance scales.
+            pygame.draw.line(surface, (200, 170, 120), (cx, cy - 18), (cx, cy + 14), 3)
+            pygame.draw.line(surface, (200, 170, 120), (cx - 20, cy - 2), (cx + 20, cy - 2), 2)
+            pygame.draw.polygon(
+                surface, (160, 120, 70), [(cx - 20, cy - 2), (cx - 12, cy + 8), (cx - 28, cy + 8)]
+            )
+            pygame.draw.polygon(
+                surface, (160, 120, 70), [(cx + 20, cy - 2), (cx + 28, cy + 8), (cx + 12, cy + 8)]
             )
 
 

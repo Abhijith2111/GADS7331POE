@@ -52,7 +52,7 @@ from src.game.ui import (
 )
 from src.game.market import MARKET_OFFERS
 from src.game.world_map import LocationScene, WorldMapScene
-from src.game.world_map_data import get_hotspot, get_location
+from src.game.world_map_data import WHOLESALE_MARKET_ID, get_hotspot, get_location
 from src.game.world_state import WorldState
 from src.llm import prompts as P
 from src.llm.ollama_client import OllamaClient, OllamaConfig, OllamaError
@@ -451,7 +451,6 @@ class Game:
             "  - Type a message and press Enter to talk to the customer.\n"
             "  - Use the buttons on the right for actions:\n"
             "      Show stock     - the bar's menu and prices\n"
-            "      Market         - buy wholesale ale, wine, provisions, fuel\n"
             "      Sell item...   - pick an item, set a price, and haggle\n"
             "      Ask for work   - see if the customer has a quest\n"
             "      View quests    - your active and completed quests\n"
@@ -462,10 +461,10 @@ class Game:
             "                       the rumour for free (+townsfolk).\n"
             "      Next customer  - send this one away, bring in the next\n"
             "      Save game      - persist the world state to disk\n"
-            "  - Leaving the bar: use 'Leave the bar' on the side panel\n"
-            "    anytime. On the world map pick a region; inside a location,\n"
-            "    click the glowing hotspot when you're on a quest to find\n"
-            "    the item. Wrong clicks just\n"
+            "  - Leaving the bar: use 'Leave the bar', then pick a region or\n"
+            "    Wholesale Row on the map to buy bulk tavern supplies.\n"
+            "    In other regions, click the glowing hotspot when on\n"
+            "    a quest to find the item. Wrong clicks just\n"
             "    print 'Nothing useful here.' and cost you nothing.\n"
             "  - Hot-keys: F1 help, F2 settings, F5 next customer, T toggles\n"
             "    the AI banner, M mutes/unmutes background music, Esc quits.\n"
@@ -1374,7 +1373,6 @@ class Game:
         if self.mode == MODE_TAVERN:
             buttons = [
                 ("Show stock", self._show_stock_modal),
-                ("Market", self._show_market_modal),
                 ("Sell item...", self._open_sell_picker),
                 ("Ask for work", self._request_quest),
                 ("View quests", self._show_quests_modal),
@@ -1394,9 +1392,15 @@ class Game:
             buttons = [
                 ("Back to map", self._enter_world_map),
                 ("Back to bar", self._return_to_tavern),
-                ("Save game", self._save_game),
-                ("Help", self._show_help),
             ]
+            if self.current_location_id == WHOLESALE_MARKET_ID:
+                buttons.append(("Browse stalls", self._show_market_modal))
+            buttons.extend(
+                [
+                    ("Save game", self._save_game),
+                    ("Help", self._show_help),
+                ]
+            )
         self.actions.set_buttons(buttons)
 
     def _enter_world_map(self) -> None:
@@ -1780,6 +1784,9 @@ class Game:
     # ------------------------------------------------------------------
     def _on_hotspot_click(self, hotspot_id: str) -> None:
         if self.current_location_id is None or self.streaming:
+            return
+        if self.current_location_id == WHOLESALE_MARKET_ID:
+            self._show_market_modal()
             return
         # Is this hotspot the target of any active quest at this location?
         match = None

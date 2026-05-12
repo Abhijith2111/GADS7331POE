@@ -26,6 +26,17 @@ from typing import Any
 DEFAULT_LOCATION_ID = "outskirts"
 DEFAULT_HOTSPOT_ID = "creek_bed"
 
+# Regions where quests may place objectives. Wholesale Row is UI-only for
+# buying stock and must not appear as an LLM quest ``location``.
+QUEST_LOCATION_IDS: tuple[str, ...] = (
+    "mines",
+    "town",
+    "outskirts",
+    "castle_hall",
+)
+
+WHOLESALE_MARKET_ID = "wholesale_market"
+
 
 LOCATIONS: dict[str, dict[str, Any]] = {
     "mines": {
@@ -76,12 +87,26 @@ LOCATIONS: dict[str, dict[str, Any]] = {
             {"id": "servants_door",  "name": "Servants' Door",      "pos": (0.85, 0.72)},
         ],
     },
+    WHOLESALE_MARKET_ID: {
+        "id": WHOLESALE_MARKET_ID,
+        "name": "Wholesale Row",
+        "blurb": "Bulk importers — restock ale, wine, kitchen, and fuel.",
+        "palette": "bazaar",
+        "hotspots": [
+            {"id": "importers_stall", "name": "Importers' Stall", "pos": (0.50, 0.58)},
+        ],
+    },
 }
 
 
 def location_ids() -> list[str]:
-    """Return the canonical list of valid location ids."""
-    return list(LOCATIONS.keys())
+    """Return ids valid for quests and story exploration (excludes services)."""
+    return list(QUEST_LOCATION_IDS)
+
+
+def map_destination_ids() -> list[str]:
+    """Ordered list of every world-map card, including Wholesale Row."""
+    return list(QUEST_LOCATION_IDS) + [WHOLESALE_MARKET_ID]
 
 
 def get_location(location_id: str) -> dict[str, Any]:
@@ -105,7 +130,8 @@ def get_hotspot(location_id: str, hotspot_id: str) -> dict[str, Any] | None:
 def render_locations_for_prompt() -> str:
     """Format the locations table for inclusion in an LLM system prompt."""
     lines: list[str] = []
-    for loc in LOCATIONS.values():
+    for loc_id in QUEST_LOCATION_IDS:
+        loc = LOCATIONS[loc_id]
         lines.append(f"- {loc['id']} ({loc['name']}): {loc['blurb']}")
         lines.append("    hotspots:")
         for h in loc["hotspots"]:
