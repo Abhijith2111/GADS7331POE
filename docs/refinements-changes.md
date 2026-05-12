@@ -23,7 +23,7 @@ buttons were added.
   room above the dialogue box.
 - ``ActionPanel._rebuild`` no longer uses a hard 28px floor; it splits
   ``avail_h`` evenly with a 56px cap, then shrinks rows / gaps until the
-  stack fits. Toasters anchor to the top-left of the action column so
+  stack fits. Toasts anchor to the top-left of the action column so
   they don't cover the chat stack.
 
 ---
