@@ -124,12 +124,17 @@ Two action-panel buttons surface what the world has remembered for you:
   the location and hotspot where the item hides, reward, danger) and a
   list of recently completed ones.
 - **View gossip** — a modal with every rumour you've overheard while
-  chatting. If the customer currently at the bar is named in a rumour,
-  that row gets a **Sell to <first name>** button. Clicking it opens a
-  small price picker; the customer then negotiates whether to pay (it's
-  the haggle path with a different system prompt). Selling out a
-  customer banks gold but costs you 1 townsfolk reputation, and the
-  rumour is "burned" — it disappears from your gossip list.
+  chatting. Lines are scanned for **full names from `data/personas/`**
+  (substring match) or long first names (whole-word match). When
+  someone is at the bar:
+  - **Sell re: _Patron_** — they'll pay (LLM haggle) to hear dirt
+    *about themselves*; gold in, **-1 townsfolk**, rumour removed.
+  - **Sell intel** — if the line names *other* regulars, you haggle a
+    price to sell that third-party gossip. Gold in, **no rep penalty**,
+    rumour removed on a deal.
+  - **Spread** — hand them the same third-party rumour **for free**:
+    the original line is removed, a new derivative rumour is added so
+    it propagates through the town pool, and you gain **+1 townsfolk**.
 
 ### Leaving the bar (quest exploration)
 

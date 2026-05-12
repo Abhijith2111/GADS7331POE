@@ -235,6 +235,58 @@ def build_gossip_buy_messages(
     ]
 
 
+GOSSIP_INTEL_RULES = """The tavern keeper is offering to sell you a piece
+of gossip circulating in the bar — NOT about you, but about one or more
+named locals you may care about (rivals, debtors, lovers, authorities).
+You are deciding whether to pay the asking price to hear it. Reply with
+ONLY a JSON object matching this schema, no prose, no markdown fences:
+
+{
+  "accept": boolean,
+  "counter_offer": integer|null,
+  "line": string,
+  "walk_away": boolean
+}
+
+Rules:
+- Never accept above your coin purse; never counter above your purse.
+- If the rumour sounds juicy, actionable, or damaging to someone you
+  dislike, you may pay. If it sounds dull or irrelevant, walk away.
+- Stay strictly in character.
+- The subjects named in the rumour are other people — not you.
+"""
+
+
+def build_gossip_intel_messages(
+    persona: dict[str, Any],
+    world_state: dict[str, Any],
+    subject_names: str,
+    rumour_text: str,
+    offered_price: int,
+) -> list[dict[str, str]]:
+    """JSON-mode prompt: sell third-party intel to the current customer."""
+    system = (
+        f"{GOSSIP_INTEL_RULES}\n"
+        f"--- Persona ---\n{_persona_card(persona)}\n\n"
+        f"--- World state ---\n{_world_state_block(world_state)}\n\n"
+        f"--- Who the rumour is ABOUT (not you) ---\n"
+        f"{subject_names}\n\n"
+        f"--- The rumour (as the keeper would tell it) ---\n"
+        f"\"{rumour_text}\"\n\n"
+        f"--- Your coin purse ---\n"
+        f"You can pay at most {persona['budget_gold']} gold.\n"
+    )
+    user = (
+        f"The keeper offers this intelligence about {subject_names} for "
+        f"{offered_price} gold. Decide: pay, counter-offer, or walk "
+        "away. Reply ONLY with JSON."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Quest generation path (JSON-mode)
 # ---------------------------------------------------------------------------

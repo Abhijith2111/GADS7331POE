@@ -4,12 +4,43 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
 
 PERSONA_DIR = Path("data") / "personas"
+
+
+def personas_mentioned_in_text(
+    text: str, personas: Iterable[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Return persona JSON dicts whose display name appears in ``text``.
+
+    Matches full name as a substring (case-insensitive) or the first
+    name as a whole word when it is at least 4 letters long (avoids
+    matching short syllables like ``Ann`` inside other words).
+    """
+    lowered = text.lower()
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for p in personas:
+        pid = str(p.get("id", ""))
+        name = str(p.get("name", "")).strip()
+        if not name or pid in seen:
+            continue
+        if name.lower() in lowered:
+            out.append(p)
+            seen.add(pid)
+            continue
+        first = name.split()[0]
+        if len(first) >= 4 and re.search(
+            r"\b" + re.escape(first.lower()) + r"\b", lowered
+        ):
+            out.append(p)
+            seen.add(pid)
+    return out
 
 
 @dataclass

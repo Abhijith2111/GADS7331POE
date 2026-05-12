@@ -5,6 +5,33 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-05-12 — Gossip journal: third-party intel + free "Spread"
+
+**Tag:** `feature`, `prompt`
+**Source:** user request — surface gossip *about other patrons* and let
+the keeper **sell** or **give** it to whoever is at the bar to seed
+rumours.
+
+- The gossip list now resolves **named regulars** via
+  ``personas_mentioned_in_text`` in ``npc.py`` (full-name substring +
+  first name as a whole word when 4+ letters).
+- Per rumour row, with a customer seated:
+  - **Sell re: &lt;first&gt;** — same as before: haggling over dirt
+    *about the listener* (``build_gossip_buy_messages``). Accept still
+    costs **-1 townsfolk**.
+  - **Sell intel** — appears when the line names *other* personas;
+    new JSON prompt ``build_gossip_intel_messages`` (same
+    ``HaggleDecision`` schema). Paying customers for third-party dirt
+    does **not** stack the "sell them their own secret" penalty: **0
+    rep** change on accept.
+  - **Spread** — free: removes the original journal line, appends a
+    derived rumour (so it can surface in later chat prompts),
+    **+1 townsfolk**, closes the modal, and logs a short dialogue beat.
+- Added ``tests/test_gossip_personas.py`` for the name-resolution
+  heuristic.
+
+---
+
 ## 2026-05-12 — Action panel full-height + taller window (all buttons visible)
 
 **Tag:** `ui`

@@ -27,7 +27,13 @@ from typing import Any
 import pygame
 
 from src.game.assets import MusicPlayer, SoundLibrary, load_font
-from src.game.npc import NPC, CustomerQueue, load_persona_by_id, load_personas
+from src.game.npc import (
+    NPC,
+    CustomerQueue,
+    load_persona_by_id,
+    load_personas,
+    personas_mentioned_in_text,
+)
 from src.game.scene import TavernScene
 from src.game.ui import (
     GOOD,
@@ -106,12 +112,13 @@ class FoundResultEvent:
 
 @dataclass
 class GossipSellResultEvent:
-    """Result of the 'sell rumour about you' micro-haggle."""
+    """Result of selling gossip (about the listener or about others)."""
 
     decision: HaggleDecision
     rumour_text: str
     offered_price: int
     ok: bool
+    rumour_kind: str = "about_self"  # about_self | about_other
 
 
 @dataclass
@@ -305,6 +312,8 @@ class Game:
         # Gossip-sell flow state (active while the gossip price modal is up).
         self._gossip_sell_text: str | None = None
         self._gossip_sell_offer: int = 5
+        self._gossip_sell_kind: str = "about_self"
+        self._gossip_subject_label: str = ""
 
         # Pin the NPC + name plate just above the dialogue box.
         self.scene.set_floor_y(self.dialogue.rect.top - 8)
@@ -444,10 +453,11 @@ class Game:
             "      Sell item...   - pick an item, set a price, and haggle\n"
             "      Ask for work   - see if the customer has a quest\n"
             "      View quests    - your active and completed quests\n"
-            "      View gossip    - rumours you've overheard. If the\n"
-            "                       current customer is named in one,\n"
-            "                       you can sell them the rumour for\n"
-            "                       a price of your choosing.\n"
+            "      View gossip    - rumours you've overheard. Named patrons\n"
+            "                       get **Sell re: you** if the line is about\n"
+            "                       them, **Sell intel** if it's about someone\n"
+            "                       else at the bar, and **Spread** to plant\n"
+            "                       the rumour for free (+townsfolk).\n"
             "      Next customer  - send this one away, bring in the next\n"
             "      Save game      - persist the world state to disk\n"
             "  - Leaving the bar: once you have a quest, the side panel\n"
@@ -557,11 +567,14 @@ class Game:
     def _show_gossip_modal(self) -> None:
         """Modal listing every rumour the keeper has overheard.
 
-        If a rumour mentions the current customer by name, a "Sell to
-        <first name>" button is drawn on its row -- clicking it starts
-        the sell-the-rumour negotiation flow. Wrapping is done by hand
-        (rather than via ``ModalPanel.show``) so we can pin each button
-        to its rumour's own y-coordinate.
+        For each line we detect which patrons (from ``self.personas``)
+        are named. When someone is at the bar:
+
+        - If the rumour is **about them**, ``Sell re: you`` starts the
+          original buy-your-own-rumour haggle.
+        - If it names **other** patrons, ``Sell intel`` haggles over
+          third-party gossip and ``Spread`` tells them for free while
+          adding a derived rumour so it propagates through town.
         """
         if not self.world.gossip_heard:
             body = (
@@ -577,8 +590,6 @@ class Game:
             self.modal.show("Gossip Heard", body, [close])
             return
 
-        # Show the most recent entries first; older ones are paginated out
-        # but counted in the footer so the player knows they exist.
         recent = list(reversed(self.world.gossip_heard))
         max_visible = 8
         shown = recent[:max_visible]
@@ -587,14 +598,11 @@ class Game:
         modal = self.modal
         modal_rect = modal.rect
         npc = self.current_npc
-        npc_first = (npc.name.split()[0] if npc else "").lower()
-        npc_full = (npc.name if npc else "").lower()
 
-        button_w = 170
-        button_h = 30
-        text_max_width = modal_rect.width - 40 - button_w - 20
+        right_slot_w = 220
+        small_h = 26
+        text_max_width = modal_rect.width - 40 - right_slot_w - 16
 
-        # Title block + body start y match ModalPanel.draw.
         body_top = (
             modal_rect.top
             + 18
@@ -606,49 +614,78 @@ class Game:
         body_lines: list[str] = []
         buttons: list[Button] = []
         y = body_top
+        bx = modal_rect.right - 20 - right_slot_w
+
         for gossip in shown:
             wrapped = wrap_text(f"- {gossip}", modal.body_font, text_max_width)
-            first_line_y = y
+            row_top = y
             for line in wrapped:
                 body_lines.append(line)
                 y += line_h
-            mentions = npc is not None and (
-                (npc_first and npc_first in gossip.lower())
-                or (npc_full and npc_full in gossip.lower())
-            )
-            if mentions and npc is not None and not self.streaming:
-                short_name = npc.name.split()[0]
-                buttons.append(
-                    Button(
-                        f"Sell to {short_name}",
-                        pygame.Rect(
-                            modal_rect.right - 20 - button_w,
-                            first_line_y,
-                            button_w,
-                            button_h,
-                        ),
-                        on_click=(
-                            lambda g=gossip: self._open_gossip_sell_price(g)
-                        ),
+
+            mentioned = personas_mentioned_in_text(gossip, self.personas)
+            if npc is not None and not self.streaming:
+                self_hit = any(p["id"] == npc.id for p in mentioned)
+                others = [p for p in mentioned if p["id"] != npc.id]
+                subject_label = ", ".join(str(p["name"]) for p in others)
+
+                btn_y = row_top
+                if self_hit:
+                    short = npc.name.split()[0]
+                    buttons.append(
+                        Button(
+                            f"Sell re: {short}",
+                            pygame.Rect(bx, btn_y, right_slot_w, small_h),
+                            on_click=(
+                                lambda g=gossip: self._open_gossip_sell_price(
+                                    g, "about_self", ""
+                                )
+                            ),
+                        )
                     )
-                )
+                    btn_y += small_h + 4
+                if others:
+                    half = (right_slot_w - 6) // 2
+                    buttons.append(
+                        Button(
+                            "Sell intel",
+                            pygame.Rect(bx, btn_y, half, small_h),
+                            on_click=(
+                                lambda g=gossip, sl=subject_label: self._open_gossip_sell_price(
+                                    g, "about_other", sl
+                                )
+                            ),
+                        )
+                    )
+                    buttons.append(
+                        Button(
+                            "Spread",
+                            pygame.Rect(
+                                bx + half + 6, btn_y, half, small_h
+                            ),
+                            on_click=(
+                                lambda g=gossip: self._spread_gossip_free(g)
+                            ),
+                        )
+                    )
+
             body_lines.append("")
             y += line_h
+
         if hidden > 0:
             body_lines.append(f"({hidden} older rumour(s) not shown.)")
         if npc is None:
             body_lines.append("")
             body_lines.append(
-                "(Spawn a customer to sell rumours about them.)"
+                "(Seat a customer to sell them gossip or spread rumours.)"
             )
         elif not any(
-            (npc_first and npc_first in g.lower())
-            or (npc_full and npc_full in g.lower())
-            for g in shown
+            personas_mentioned_in_text(g, self.personas) for g in shown
         ):
             body_lines.append("")
             body_lines.append(
-                f"(No rumours about {npc.name} on this page.)"
+                "(These lines don't name anyone in your regulars yet — "
+                "keep chatting for juicier tips.)"
             )
 
         buttons.append(
@@ -661,8 +698,6 @@ class Game:
             )
         )
 
-        # Bypass modal.show so we can keep our hand-built body_lines AND
-        # pin buttons to individual rumour rows.
         modal.title = "Gossip Heard"
         modal.body_lines = body_lines
         modal.buttons = buttons
@@ -671,14 +706,70 @@ class Game:
     # ------------------------------------------------------------------
     # Sell-a-rumour flow (gossip the keeper has overheard about the NPC)
     # ------------------------------------------------------------------
-    def _open_gossip_sell_price(self, gossip_text: str) -> None:
+    def _spread_gossip_free(self, gossip_text: str) -> None:
+        """Give third-party gossip to the current customer for free.
+
+        Removes the original line from the journal (you've spilled it),
+        adds a derived rumour so it propagates into the town-wide gossip
+        pool, bumps townsfolk reputation slightly, and closes the modal
+        so the bar scene stays readable.
+        """
+        if self.streaming:
+            return
+        if self.current_npc is None:
+            self.toasts.push("Seat a customer first.", WARN)
+            return
+        mentioned = personas_mentioned_in_text(gossip_text, self.personas)
+        others = [p for p in mentioned if p["id"] != self.current_npc.id]
+        if not others:
+            self.toasts.push(
+                "That line doesn't name anyone else to spread gossip about.",
+                WARN,
+            )
+            return
+        try:
+            self.world.gossip_heard.remove(gossip_text)
+        except ValueError:
+            self.toasts.push("That rumour is already gone.", WARN)
+            return
+
+        buyer = self.current_npc
+        names = ", ".join(str(p["name"]) for p in others)
+        snippet = (
+            gossip_text
+            if len(gossip_text) <= 100
+            else gossip_text[:97] + "..."
+        )
+        self.world.add_gossip(
+            f"{buyer.name} was heard repeating about {names}: {snippet}"
+        )
+        self.world.adjust_reputation("townsfolk", 1)
+        self.world.save()
+        self.modal.hide()
+        who = names
+        self.dialogue.add(
+            "You",
+            f"(whisper what you've heard about {who} — no charge, "
+            "to keep the taps flowing)",
+        )
+        self.toasts.push("Rumour spread for free. (+1 townsfolk)", GOOD)
+
+    def _open_gossip_sell_price(
+        self,
+        gossip_text: str,
+        kind: str = "about_self",
+        subject_label: str = "",
+    ) -> None:
         """Stage 2 of the gossip-sell flow: pick a price."""
         if self.streaming or self.current_npc is None:
             self.toasts.push("Wait for the customer's reply first.", WARN)
             return
+        if kind == "about_other" and not subject_label.strip():
+            self.toasts.push("No named subject for that intel.", WARN)
+            return
         self._gossip_sell_text = gossip_text
-        # Default opening price scales with how much the persona can
-        # afford so the first offer isn't laughably high or low.
+        self._gossip_sell_kind = kind
+        self._gossip_subject_label = subject_label.strip()
         budget = max(2, int(self.current_npc.persona.get("budget_gold", 12)))
         self._gossip_sell_offer = max(2, min(8, budget // 3))
         self._refresh_gossip_sell_modal()
@@ -689,12 +780,20 @@ class Game:
         rumour = self._gossip_sell_text
         offer = max(1, self._gossip_sell_offer)
         modal_rect = self.modal.rect
-        body = (
-            f"You hint to {self.current_npc.name} that you've heard a "
-            "rumour about them, and offer to share it for a price.\n\n"
-            f"Rumour: \"{rumour}\"\n\n"
-            f"Your asking price: {offer} gold"
-        )
+        if self._gossip_sell_kind == "about_other":
+            body = (
+                f"You offer {self.current_npc.name} salacious intelligence "
+                f"about {self._gossip_subject_label}, for a price.\n\n"
+                f"Rumour: \"{rumour}\"\n\n"
+                f"Your asking price: {offer} gold"
+            )
+        else:
+            body = (
+                f"You hint to {self.current_npc.name} that you've heard a "
+                "rumour about them, and offer to share it for a price.\n\n"
+                f"Rumour: \"{rumour}\"\n\n"
+                f"Your asking price: {offer} gold"
+            )
 
         step_y = modal_rect.bottom - 130
         step_specs = [
@@ -744,11 +843,15 @@ class Game:
     def _cancel_gossip_sell(self) -> None:
         self._gossip_sell_text = None
         self._gossip_sell_offer = 5
+        self._gossip_sell_kind = "about_self"
+        self._gossip_subject_label = ""
         self.modal.hide()
 
     def _reopen_gossip_modal(self) -> None:
         """Back from the price modal — return to the gossip list."""
         self._gossip_sell_text = None
+        self._gossip_sell_kind = "about_self"
+        self._gossip_subject_label = ""
         self._show_gossip_modal()
 
     def _confirm_gossip_offer(self) -> None:
@@ -756,12 +859,22 @@ class Game:
             return
         rumour = self._gossip_sell_text
         price = max(1, self._gossip_sell_offer)
+        kind = self._gossip_sell_kind
+        subj = self._gossip_subject_label
         self._gossip_sell_text = None
         self._gossip_sell_offer = 5
+        self._gossip_sell_kind = "about_self"
+        self._gossip_subject_label = ""
         self.modal.hide()
-        self._start_gossip_sell(rumour, price)
+        self._start_gossip_sell(rumour, price, kind, subj)
 
-    def _start_gossip_sell(self, rumour_text: str, offered_price: int) -> None:
+    def _start_gossip_sell(
+        self,
+        rumour_text: str,
+        offered_price: int,
+        kind: str,
+        subject_label: str,
+    ) -> None:
         if self.streaming or self.current_npc is None:
             return
         self.streaming = True
@@ -772,23 +885,38 @@ class Game:
         )
         threading.Thread(
             target=self._gossip_sell_worker,
-            args=(rumour_text, offered_price),
+            args=(rumour_text, offered_price, kind, subject_label),
             daemon=True,
         ).start()
 
-    def _gossip_sell_worker(self, rumour_text: str, offered_price: int) -> None:
+    def _gossip_sell_worker(
+        self,
+        rumour_text: str,
+        offered_price: int,
+        kind: str,
+        subject_label: str,
+    ) -> None:
         assert self.current_npc is not None
         npc = self.current_npc
         budget = int(npc.persona.get("budget_gold", 10))
         # Floor stays low so the model is allowed to take a cheap deal
         # if the rumour looks tame.
         floor = 1
-        messages = P.build_gossip_buy_messages(
-            npc.persona,
-            self.world.to_prompt_dict(),
-            rumour_text,
-            offered_price,
-        )
+        if kind == "about_other":
+            messages = P.build_gossip_intel_messages(
+                npc.persona,
+                self.world.to_prompt_dict(),
+                subject_label,
+                rumour_text,
+                offered_price,
+            )
+        else:
+            messages = P.build_gossip_buy_messages(
+                npc.persona,
+                self.world.to_prompt_dict(),
+                rumour_text,
+                offered_price,
+            )
         try:
             decision, ok = call_with_retry(
                 lambda: self.client.json_call(
@@ -808,6 +936,7 @@ class Game:
                     rumour_text=rumour_text,
                     offered_price=offered_price,
                     ok=ok,
+                    rumour_kind=kind,
                 )
             )
         except OllamaError as exc:
@@ -816,9 +945,10 @@ class Game:
     def _on_gossip_sell_result(self, ev: GossipSellResultEvent) -> None:
         """Apply the NPC's decision to the world state.
 
-        Accept   -> +price gold, rumour removed from gossip_heard (it's
-                    been "burned"), -1 townsfolk reputation (selling
-                    customers out is bad for the tavern's name).
+        Accept   -> +price gold; rumour removed. If the rumour was about
+                    the listener themselves, -1 townsfolk (selling them
+                    their own dirt). If it was third-party intel, no rep
+                    penalty.
         Counter  -> toast tells the player; they can re-open the gossip
                     list and offer the new price.
         Walk away-> no transaction; the rumour stays.
@@ -834,14 +964,17 @@ class Game:
         self.dialogue.add(self.current_npc.name, decision.line)
         if decision.accept:
             self.world.add_gold(ev.offered_price)
-            self.world.adjust_reputation("townsfolk", -1)
+            if ev.rumour_kind == "about_self":
+                self.world.adjust_reputation("townsfolk", -1)
+                rep_tail = " (-1 townsfolk)"
+            else:
+                rep_tail = ""
             if ev.rumour_text in self.world.gossip_heard:
                 self.world.gossip_heard.remove(ev.rumour_text)
             self.world.save()
             self.sfx.play("coin")
             self.toasts.push(
-                f"Sold the rumour for {ev.offered_price}g. "
-                "(-1 townsfolk)",
+                f"Sold the rumour for {ev.offered_price}g.{rep_tail}",
                 GOOD,
             )
         elif decision.walk_away:
