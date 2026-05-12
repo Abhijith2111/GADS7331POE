@@ -384,11 +384,22 @@ class ActionPanel:
         if not self._specs:
             return
         padding = 10
-        title_h = self.title_font.get_height() + 10
-        gap = 6
+        title_h = self.title_font.get_height() + 6
         n = len(self._specs)
-        avail_h = self.rect.height - padding * 2 - title_h
-        button_h = max(28, (avail_h - gap * (n - 1)) // n)
+        avail_h = max(0, self.rect.height - padding * 2 - title_h)
+        gap = 6
+        total_gap = gap * max(0, n - 1)
+        # Share the panel evenly; cap height for aesthetics on tall windows.
+        button_h = max(14, min(56, (avail_h - total_gap) // max(1, n)))
+        # Shrink until the stack fits (handles many buttons / short rects).
+        while n * button_h + gap * max(0, n - 1) > avail_h and button_h > 14:
+            button_h -= 1
+        while n * button_h + gap * max(0, n - 1) > avail_h and gap > 2:
+            gap -= 1
+            button_h = max(
+                14, (avail_h - gap * max(0, n - 1)) // max(1, n)
+            )
+
         button_w = self.rect.width - padding * 2
         x = self.rect.left + padding
         y0 = self.rect.top + padding + title_h

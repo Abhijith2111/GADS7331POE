@@ -5,6 +5,29 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-05-12 — Action panel full-height + taller window (all buttons visible)
+
+**Tag:** `ui`
+**Source:** user report — the actions column clipped after many new
+buttons were added.
+
+- The action panel used to match only the dialogue + input stack
+  (~300px tall) while TAVERN mode can show 9+ buttons. ``_rebuild``
+  enforced a 28px minimum row height, so the bottom rows drew below
+  the panel rect.
+- The panel now spans the **full right column** from the tavern canvas
+  top (below the status band) to the bottom window margin, matching the
+  world-map canvas height. That alone restores ~650+ vertical pixels for
+  the button stack on a 1280-wide window.
+- Default window height bumped **800 -> 880** for a bit more breathing
+  room above the dialogue box.
+- ``ActionPanel._rebuild`` no longer uses a hard 28px floor; it splits
+  ``avail_h`` evenly with a 56px cap, then shrinks rows / gaps until the
+  stack fits. Toasters anchor to the top-left of the action column so
+  they don't cover the chat stack.
+
+---
+
 ## 2026-05-12 — Quest + gossip journals, sell-the-rumour negotiation
 
 **Tag:** `feature`, `prompt`

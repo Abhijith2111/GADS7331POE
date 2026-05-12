@@ -63,7 +63,9 @@ from src.llm.parsers import (
     parse_quest,
 )
 
-SCREEN_SIZE = (1280, 800)
+# Taller default window so the tavern scene + full-height action column
+# fit comfortably; all buttons stay on-screen without scrolling.
+SCREEN_SIZE = (1280, 880)
 TITLE = "The Wandering Goblet"
 ITEMS_PATH = Path("data") / "items.json"
 
@@ -275,11 +277,14 @@ class Game:
             submit_cb=self._on_player_submit,
         )
 
-        # Action panel sits to the right of the chat + input, spanning
-        # both vertically. Buttons replace the old slash-command flow.
+        # Action column: full height from below the status band to the
+        # bottom margin, so every mode's buttons fit without clipping.
+        # (Previously the panel only matched the dialogue stack + input,
+        # which was too short once we added journals/explore buttons.)
+        scene_top = margin + 26 + status_h + 8
         action_x = margin + chat_w + side_gap
-        action_y = sh - margin - input_h - 12 - dialogue_h
-        action_h = dialogue_h + 12 + input_h
+        action_y = scene_top
+        action_h = sh - margin - action_y
         self.actions = ActionPanel(
             pygame.Rect(action_x, action_y, side_panel_w, action_h)
         )
@@ -287,7 +292,7 @@ class Game:
         # ``_refresh_action_buttons`` so we don't seed any here.
 
         self.toasts = ToastStack(
-            anchor=(sw - margin - side_panel_w - side_gap, sh - margin - input_h - dialogue_h - 30)
+            anchor=(action_x, action_y + 6)
         )
         self.banner = TransparencyBanner(sw)
         self.modal = ModalPanel(SCREEN_SIZE, (720, 520))
