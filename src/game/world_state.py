@@ -147,11 +147,42 @@ class WorldState:
     # ------------------------------------------------------------------
     def to_prompt_dict(self) -> dict[str, Any]:
         """The minimal view exposed to the LLM via prompts.py."""
+        titles = [q.get("title", "") for q in self.active_quests]
+        used = sorted(self.active_location_ids())
+        all_ids = location_ids()
+        open_for_new = [lid for lid in all_ids if lid not in self.active_location_ids()]
+
+        lines = [
+            f"{q.get('title', '?')}  (map region: {q.get('location', '?')})"
+            for q in self.active_quests
+        ]
+        qmb_lines: list[str] = []
+        if lines:
+            qmb_lines.append("Open errands the keeper is already juggling:")
+            qmb_lines.extend(f"  - {ln}" for ln in lines)
+        if used:
+            qmb_lines.append(
+                "Map regions that ALREADY have at least one open errand: "
+                + ", ".join(used)
+            )
+        if open_for_new:
+            qmb_lines.append(
+                "Map regions with NO open errand yet (prefer these for NEW "
+                "work when the story allows): " + ", ".join(open_for_new)
+            )
+        else:
+            qmb_lines.append(
+                "All four map regions already hold an open errand."
+            )
+
         return {
             "gold": self.gold,
             "reputation": dict(self.reputation),
             "gossip_heard": list(self.gossip_heard),
-            "active_quests": [q.get("title", "") for q in self.active_quests],
+            "active_quests": titles,
+            "map_regions_used_by_quests": used,
+            "map_regions_open_for_new_quest": open_for_new,
+            "_quest_map_block": "\n".join(qmb_lines),
         }
 
 

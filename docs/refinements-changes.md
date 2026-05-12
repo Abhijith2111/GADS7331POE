@@ -5,6 +5,22 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-05-12 — Quest generation steers across all map regions
+
+**Tag:** `prompt`, `world`
+**Source:** user note — new quests were clustering in one map region.
+
+- ``WorldState.to_prompt_dict`` now injects which **exploration regions**
+  already hold an active errand vs which are **still empty**, plus a
+  human-readable list of open quests with their `location` ids.
+- The shared ``_world_state_block`` appends this "quest map" blurb into
+  chat/haggle/quest prompts so the model always sees coverage.
+- ``QUEST_RULES`` + the quest user line explicitly tell the model to
+  prefer an **unused** `mines`/`town`/`outskirts`/`castle_hall` when the
+  story still works, instead of habit-stacking everything in one biome.
+
+---
+
 ## 2026-05-12 — Gossip journal: third-party intel + free "Spread"
 
 **Tag:** `feature`, `prompt`

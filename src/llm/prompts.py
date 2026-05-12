@@ -52,11 +52,20 @@ def _world_state_block(world_state: dict[str, Any]) -> str:
         gossip_lines = "  - (none yet)"
     rep = world_state.get("reputation", {})
     rep_str = ", ".join(f"{k}: {v}" for k, v in rep.items()) or "unknown"
+
+    # Quest + map coverage (filled by ``WorldState.to_prompt_dict``).
+    quest_map = world_state.get("_quest_map_block", "").strip()
+    if quest_map:
+        quest_map = f"\n{quest_map}\n"
+    else:
+        quest_map = ""
+
     return (
         f"Tavern name: The Wandering Goblet\n"
         f"Player gold: {world_state.get('gold', 0)}\n"
         f"Tavern reputation: {rep_str}\n"
         f"Recent gossip already in town:\n{gossip_lines}"
+        f"{quest_map}"
     )
 
 
@@ -312,6 +321,13 @@ Rules:
 - 'hotspot' MUST be one of the hotspot ids listed under that location.
 - Pick a location/hotspot pair that fits the narrative target -- if the
   target is a missing pickaxe, the mines fit better than the castle.
+- **Spread work across the map.** The four regions are `mines`, `town`,
+  `outskirts`, and `castle_hall`. If the world state lists regions that
+  do NOT yet have an open errand, strongly prefer setting THIS quest's
+  `location` to one of those unused regions whenever the story still makes
+  sense. Do not default every quest to the same region out of habit.
+  Only reuse a region that already has an open errand if the target truly
+  could not plausibly be anywhere else.
 """
 
 
@@ -319,6 +335,17 @@ def build_quest_messages(
     persona: dict[str, Any],
     world_state: dict[str, Any],
 ) -> list[dict[str, str]]:
+    open_regions = world_state.get("map_regions_open_for_new_quest") or []
+    used_regions = world_state.get("map_regions_used_by_quests") or []
+    hint = ""
+    if open_regions:
+        hint = (
+            f" Prefer `location` one of: {', '.join(open_regions)} "
+            f"— those map areas have no open errand yet. "
+        )
+    elif used_regions and len(used_regions) >= 4:
+        hint = " Every region already has work queued; any location is fine. "
+
     system = (
         f"{QUEST_RULES}\n"
         f"--- Persona ---\n{_persona_card(persona)}\n\n"
@@ -329,7 +356,8 @@ def build_quest_messages(
     user = (
         "Generate a single quest the customer asks the tavern keeper to do, "
         "as JSON only. Remember to fill in 'location' and 'hotspot' from "
-        "the table above."
+        f"the table above. {hint}"
+        "Vary the map region from this customer's earlier errands when possible."
     )
     return [
         {"role": "system", "content": system},
