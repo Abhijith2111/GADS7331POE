@@ -47,7 +47,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM --- 4. Ollama model (optional, only if Ollama is installed) -----------
+REM --- 4. Ollama model (optional - the game auto-pulls if missing) -------
 echo.
 where ollama >nul 2>nul
 if errorlevel 1 (
@@ -55,17 +55,18 @@ if errorlevel 1 (
     echo.
     echo Install Ollama from:
     echo   https://ollama.com/download
-    echo Then run:
-    echo   ollama pull llama3.2:3b
-    echo before launching the game.
+    echo The game will auto-start Ollama and auto-pull the model on
+    echo first launch as long as Ollama is installed - you do NOT need
+    echo to run any 'ollama pull' command yourself.
 ) else (
-    echo Pulling the default model llama3.2:3b ...
-    echo (already-pulled models finish in seconds)
+    echo Pre-pulling the default model llama3.2:3b ...
+    echo (already-pulled models finish in seconds; safe to skip - the
+    echo  game can also pull it on first launch if you cancel this.)
     ollama pull llama3.2:3b
     if errorlevel 1 (
         echo.
-        echo [WARN] ollama pull did not succeed. You can retry later with:
-        echo   ollama pull llama3.2:3b
+        echo [WARN] ollama pull did not succeed.
+        echo No problem - the game will retry the pull on first launch.
     )
 )
 

@@ -5,6 +5,45 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-05-12 — Game now auto-starts Ollama and auto-pulls the model
+
+**Tag:** `dx`, `setup`, `windows`
+**Source:** user feedback ("make it so launching the game just connects
+to Ollama with no connection problems"). AI-assisted (Cursor / Claude).
+
+- Until now, launching the game on a fresh machine could fail in three
+  unrelated ways: (a) Ollama daemon not started, (b) configured model
+  not pulled, (c) cold model meaning the first chat felt slow. The
+  player had to debug all three from a single "Ollama not reachable"
+  toast.
+- Added a bootstrap worker that runs in the background on launch and
+  does the right thing for each case:
+  1. **Daemon discovery** (`find_ollama_executable` in
+     `src/llm/ollama_client.py`) walks PATH and the two default Windows
+     install paths (`%LOCALAPPDATA%\Programs\Ollama\ollama.exe`,
+     `%ProgramFiles%\Ollama\ollama.exe`). The Ollama installer doesn't
+     always update PATH for the current shell session, so PATH alone
+     was unreliable.
+  2. **Auto-launch** the daemon via `ollama serve` as a detached
+     background process (no console window on Windows, survives the
+     game exit so other Ollama tooling keeps working). Polls until
+     reachable, up to 25 seconds.
+  3. **Auto-pull** the configured model via the streaming
+     `POST /api/pull` endpoint. The UI shows progress toasts
+     ("Pulling llama3.2:3b: downloading 30%"), throttled to ~3/sec.
+  4. **Warm up** the model with a 1-token call so the first real chat
+     hits a hot model and returns its first token in ~1 s instead of
+     ~5 s.
+- All status messages are pushed via the existing event queue so the
+  worker never touches pygame surfaces directly. UI stays responsive
+  the entire time the daemon is starting / the model is downloading.
+- `setup.bat` was reworded: the up-front `ollama pull` is now clearly
+  optional ("safe to skip — the game can also pull it on first
+  launch"). This lets new players double-click and play even if they
+  cancel the slow first-time pull.
+
+---
+
 ## 2026-05-11 — Added quest exploration mode (AI-assisted)
 
 **Tag:** `feature`, `scope`, `prompt`

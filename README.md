@@ -25,10 +25,16 @@ If you are on Windows and just want to play, no PowerShell required:
    (tick *"Add python.exe to PATH"* during install) and **Ollama** from
    <https://ollama.com/download>.
 2. Double-click **[setup.bat](setup.bat)** once. It creates the virtual
-   environment, installs dependencies, and pulls the default Ollama
+   environment, installs dependencies, and pre-pulls the default Ollama
    model.
 3. Double-click **[run_game.bat](run_game.bat)** any time you want to
    play.
+
+The game auto-starts the Ollama daemon on launch (no need to run
+`ollama serve` yourself) and auto-pulls the default model if it
+isn't on disk yet. The first launch shows a "Downloading
+llama3.2:3b..." toast with live progress; subsequent launches are
+near-instant because the model stays warm via `keep_alive`.
 
 Optional extras:
 

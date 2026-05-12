@@ -107,6 +107,19 @@ class ErrorEvent:
     message: str
 
 
+@dataclass
+class OllamaStatusEvent:
+    """Status update from the auto-connect worker. Drives toasts only."""
+
+    message: str
+    kind: str = "info"  # info | good | warn
+
+
+@dataclass
+class _OllamaReadyMarker:
+    """Sentinel pushed after the auto-connect worker finishes successfully."""
+
+
 # ---------------------------------------------------------------------------
 # Mode constants — TAVERN is the chat-and-haggle bar, WORLD_MAP shows the
 # four-location selector, LOCATION is the in-world hotspot search.
@@ -191,6 +204,9 @@ class Game:
         # Per-(location, hotspot) wrong-click counter, drives escalating
         # satire on repeat clicks. Reset on every fresh location entry.
         self._wrong_click_counts: dict[tuple[str, str], int] = {}
+        # Set by the Ollama auto-connect worker once the daemon, model,
+        # and warmup are all done. Mostly informational.
+        self._ollama_ready: bool = False
 
         # UI layout.
         self._init_ui()
@@ -297,13 +313,55 @@ class Game:
         self.sfx.play("door")
 
     def _check_ollama(self) -> None:
-        if self.client.ping():
-            self.toasts.push(f"Ollama: connected ({self.client.config.model})", GOOD)
-        else:
-            self.toasts.push(
-                "Ollama not reachable on localhost:11434. Run `ollama serve`.",
-                WARN,
+        """Kick off the auto-connect/auto-pull/warmup sequence.
+
+        Runs entirely on a background thread so the UI keeps drawing
+        while we wait for the daemon to come up or a fresh model to
+        download. The worker funnels status updates back through the
+        event queue, so all toast pushes happen on the main thread.
+        """
+        self._ollama_ready = False
+        threading.Thread(target=self._ollama_bootstrap_worker, daemon=True).start()
+
+    def _ollama_bootstrap_worker(self) -> None:
+        def emit(message: str, kind: str = "info") -> None:
+            self.event_q.put(OllamaStatusEvent(message=message, kind=kind))
+
+        model = self.client.config.model
+        emit("Checking Ollama...", "info")
+
+        # 1. Make sure the daemon is reachable (start it if we can).
+        if not self.client.ensure_daemon(on_status=lambda m: emit(m, "info")):
+            emit(
+                "Ollama is not available. The game will still run but "
+                "customers won't be able to talk.",
+                "warn",
             )
+            return
+
+        # 2. Make sure the configured model is on disk; pull it if not.
+        if not self.client.has_model(model):
+            emit(f"Downloading {model} (first launch only)...", "info")
+            ok = self.client.pull_model(
+                model, on_progress=lambda m: emit(m, "info")
+            )
+            if not ok:
+                emit(
+                    f"Could not pull {model}. Open a terminal and run "
+                    f"'ollama pull {model}'.",
+                    "warn",
+                )
+                return
+
+        # 3. Warm the model so the first chat is snappy.
+        emit(f"Warming up {model}...", "info")
+        self.client.warmup()
+        emit(f"Ollama ready ({model}).", "good")
+        self.event_q.put(_OllamaReadyMarker())
+
+    def _on_ollama_status(self, ev: "OllamaStatusEvent") -> None:
+        color = {"good": GOOD, "warn": WARN}.get(ev.kind, HIGHLIGHT)
+        self.toasts.push(ev.message, color)
 
     # ------------------------------------------------------------------
     # Player input
@@ -738,6 +796,10 @@ class Game:
                 self._on_quest_result(ev)
             elif isinstance(ev, FoundResultEvent):
                 self._on_found_result(ev)
+            elif isinstance(ev, OllamaStatusEvent):
+                self._on_ollama_status(ev)
+            elif isinstance(ev, _OllamaReadyMarker):
+                self._ollama_ready = True
             elif isinstance(ev, ErrorEvent):
                 self.dialogue.finalize_streaming()
                 self.streaming = False
