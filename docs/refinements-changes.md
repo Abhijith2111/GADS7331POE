@@ -5,6 +5,41 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-05-12 — Quest + gossip journals, sell-the-rumour negotiation
+
+**Tag:** `feature`, `prompt`
+**Source:** user request ("a button to view quests and a button to view
+gossip; with the gossip, if it is about another person who enters the
+bar, an option to sell them the info for a price the player enters").
+
+- Added two new action-panel buttons in TAVERN mode: **View quests**
+  and **View gossip**.
+- **Quest journal** is a read-only modal — active quests show title,
+  clipped summary, the location and hotspot they sit at, reward, and
+  danger; completed quests get a single line each.
+- **Gossip journal** lists the rumours the keeper has overheard
+  (paginated to the 8 most recent so the modal stays one screen). For
+  each rumour, we run a case-insensitive substring check against the
+  current customer's full name and first name; if the rumour mentions
+  them, that row gets a **Sell to <first name>** button.
+- **Sell-the-rumour flow.** Clicking the Sell button opens a small
+  price picker (the same stepper widget the item sell modal uses),
+  then fires a new JSON-mode call. A new prompt
+  (`build_gossip_buy_messages` in `prompts.py`) frames the situation
+  from the customer's POV — "the keeper is offering to whisper a
+  rumour about YOU for N gold" — and re-uses the existing
+  `HaggleDecision` schema. `parse_haggle` already clamps to the
+  persona's `budget_gold`, so the model can't bankrupt a customer or
+  accept above their purse.
+- **Consequences.** On accept, the rumour is removed from
+  `gossip_heard` (it's been "burned"), gold is credited, and townsfolk
+  reputation drops by 1 — selling customers out is a real gameplay
+  trade-off, not a free win. On counter-offer or walk-away, a toast
+  surfaces the result and the rumour stays in the journal so the
+  player can try again.
+
+---
+
 ## 2026-05-12 — Added procedural background music
 
 **Tag:** `feature`, `audio`

@@ -176,6 +176,66 @@ def build_haggle_messages(
 
 
 # ---------------------------------------------------------------------------
+# Gossip-buying path (JSON-mode, re-uses HaggleDecision schema)
+# ---------------------------------------------------------------------------
+GOSSIP_BUY_RULES = """The tavern keeper is offering to sell you a piece of
+gossip that is circulating about YOU personally, for a price in gold. You
+are deciding whether to pay so you can hear what's being said. Reply with
+ONLY a JSON object matching this schema, no prose, no markdown fences:
+
+{
+  "accept": boolean,           // true = pay the keeper, false = haggle continues or refuse
+  "counter_offer": integer|null, // your counter price in gold (omit on accept)
+  "line": string,              // a short in-character reply (max 25 words)
+  "walk_away": boolean         // true if the rumour is not worth paying for
+}
+
+Rules:
+- The rumour is ABOUT YOU. Decide based on how much it might damage you.
+- Never accept above your coin purse.
+- Counter-offers must be a whole number of gold, >= 1.
+- If the rumour reveals your secret or names you directly, value it more.
+- If the rumour is vague or harmless, walk away (set walk_away=true).
+- Stay strictly in character; reflect your voice and your starting attitude.
+- The keeper is selling YOU on YOU; do not pretend the rumour is about
+  someone else.
+"""
+
+
+def build_gossip_buy_messages(
+    persona: dict[str, Any],
+    world_state: dict[str, Any],
+    rumour_text: str,
+    offered_price: int,
+) -> list[dict[str, str]]:
+    """Build the JSON-mode prompt for a sell-the-rumour negotiation.
+
+    The reply schema deliberately matches haggling (``HaggleDecision``)
+    so the existing ``parse_haggle`` clamping logic re-applies here.
+    The persona's ``budget_gold`` is the hard ceiling; the floor is set
+    low so the model can take an attractive bargain.
+    """
+    system = (
+        f"{GOSSIP_BUY_RULES}\n"
+        f"--- Persona ---\n{_persona_card(persona)}\n\n"
+        f"--- World state ---\n{_world_state_block(world_state)}\n\n"
+        f"--- Rumour the keeper claims to have heard about YOU ---\n"
+        f"\"{rumour_text}\"\n\n"
+        f"--- Your coin purse ---\n"
+        f"You can pay at most {persona['budget_gold']} gold.\n"
+    )
+    user = (
+        f"The keeper offers to whisper this rumour about you for "
+        f"{offered_price} gold. Decide: pay, counter-offer, or walk "
+        "away. Reply ONLY with JSON."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Quest generation path (JSON-mode)
 # ---------------------------------------------------------------------------
 QUEST_RULES = """You generate ONE small fetch-or-rumour quest the customer

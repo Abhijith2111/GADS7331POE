@@ -116,6 +116,21 @@ copyright noise. Press **M** to mute it. If you want a real track
 instead, drop any `.ogg`, `.wav`, or `.mp3` file into `assets/music/`
 and the game will use it on next launch (alphabetical first wins).
 
+### Journal: quests and gossip
+
+Two action-panel buttons surface what the world has remembered for you:
+
+- **View quests** — a modal with every active quest (title, summary,
+  the location and hotspot where the item hides, reward, danger) and a
+  list of recently completed ones.
+- **View gossip** — a modal with every rumour you've overheard while
+  chatting. If the customer currently at the bar is named in a rumour,
+  that row gets a **Sell to <first name>** button. Clicking it opens a
+  small price picker; the customer then negotiates whether to pay (it's
+  the haggle path with a different system prompt). Selling out a
+  customer banks gold but costs you 1 townsfolk reputation, and the
+  rumour is "burned" — it disappears from your gossip list.
+
 ### Leaving the bar (quest exploration)
 
 When you accept a quest, **"Leave the bar"** appears in the action panel.
