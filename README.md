@@ -106,7 +106,15 @@ This:
   - `/help` — in-game cheat-sheet.
 - **F1** help, **F2** settings (model picker / temperature / regenerate
   last reply / banner toggle), **F5** next customer, **T** hide the AI
-  notice, **Esc** quit.
+  notice, **M** mute/unmute background music, **Esc** quit.
+
+### Background music
+
+A calm ambient pad plays on a loop in the background, generated
+procedurally on first launch so there's nothing to ship and no
+copyright noise. Press **M** to mute it. If you want a real track
+instead, drop any `.ogg`, `.wav`, or `.mp3` file into `assets/music/`
+and the game will use it on next launch (alphabetical first wins).
 
 ### Leaving the bar (quest exploration)
 

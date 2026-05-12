@@ -26,7 +26,7 @@ from typing import Any
 
 import pygame
 
-from src.game.assets import SoundLibrary, load_font
+from src.game.assets import MusicPlayer, SoundLibrary, load_font
 from src.game.npc import NPC, CustomerQueue, load_persona_by_id, load_personas
 from src.game.scene import TavernScene
 from src.game.ui import (
@@ -177,6 +177,12 @@ class Game:
         self.world = WorldState.load()
         self.scene = TavernScene(SCREEN_SIZE)
         self.sfx = SoundLibrary()
+        # Background music: procedural ambient pad by default, overridable
+        # by any file in assets/music/. Off automatically in --demo mode
+        # so the captured video doesn't fight the dialogue audio.
+        self.music = MusicPlayer()
+        if not self.demo_mode:
+            self.music.start()
 
         self.client = OllamaClient(
             OllamaConfig(
@@ -425,7 +431,7 @@ class Game:
             "    glowing hotspot to find the item. Wrong clicks just\n"
             "    print 'Nothing useful here.' and cost you nothing.\n"
             "  - Hot-keys: F1 help, F2 settings, F5 next customer, T toggles\n"
-            "    the AI banner, Esc quits.\n"
+            "    the AI banner, M mutes/unmutes background music, Esc quits.\n"
             "  - Power users can still type slash commands like\n"
             "    /sell strong_stout 5 directly into the input bar.",
         )
@@ -1227,6 +1233,20 @@ class Game:
                             continue
                         elif self.mode == MODE_TAVERN:
                             self.text_input.handle_event(event)
+                    elif event.key == pygame.K_m and (event.mod & pygame.KMOD_CTRL == 0):
+                        # Toggle music when the input bar is empty (or
+                        # when we're not in chat mode at all). Falls
+                        # through to the text input otherwise so the
+                        # player can still type the letter m.
+                        if not self.text_input.text or self.mode != MODE_TAVERN:
+                            audible = self.music.toggle_mute()
+                            self.toasts.push(
+                                "Music: on" if audible else "Music: off",
+                                HIGHLIGHT,
+                            )
+                            continue
+                        elif self.mode == MODE_TAVERN:
+                            self.text_input.handle_event(event)
                     else:
                         # Text input is only meaningful in tavern mode.
                         if not self.modal.visible and self.mode == MODE_TAVERN:
@@ -1287,6 +1307,7 @@ class Game:
             pygame.display.flip()
 
         self.world.save()
+        self.music.dispose()
         pygame.quit()
         return 0
 

@@ -5,6 +5,33 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-05-12 — Added procedural background music
+
+**Tag:** `feature`, `audio`
+**Source:** user request ("could add some background music").
+
+- Until now the only audio surface was the optional SFX layer (door /
+  coin / quest WAVs, which weren't shipped either). The tavern was
+  silent on a clean clone.
+- Added a `MusicPlayer` in `src/game/assets.py` that drives the
+  `pygame.mixer.music` channel. It looks for a track in
+  `assets/music/` first (any `.ogg`/`.wav`/`.mp3`, alphabetical first
+  wins) so a player can drop in a real piece of music without touching
+  code. If nothing is there, it generates a 16-second warm-pad
+  ambience procedurally (`array` + `wave`, no numpy dependency) and
+  streams it on loop. The first/last 0.6 s cross-fade to silence so
+  the loop seams are inaudible.
+- Wiring: `Game.__init__` starts the music on a background thread so
+  generation doesn't block the window from appearing. `--demo` mode
+  skips music entirely (captured video should hear the dialogue
+  itself, not background drone). **M** toggles mute. `dispose()` is
+  called on exit, which stops + unloads the track and deletes the
+  temp WAV.
+- Default volume is intentionally low (32%) so the music sits *under*
+  the dialogue text rendering rhythm rather than competing with it.
+
+---
+
 ## 2026-05-12 — Game now auto-starts Ollama and auto-pulls the model
 
 **Tag:** `dx`, `setup`, `windows`
