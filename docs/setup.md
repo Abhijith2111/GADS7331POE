@@ -1,6 +1,6 @@
 # Setup Guide
 
-Complete instructions for getting **The Wandering Goblet** running on a
+Complete instructions for getting **The Tavern Master** running on a
 clean Windows machine. Linux and macOS notes are at the bottom.
 
 > **In a hurry?** Skip to [section 8 — Easy launch with .bat files](#8-easy-launch-on-windows-no-powershell)
@@ -211,7 +211,7 @@ the manual sections above.
 | **setup.bat**                     | Creates `.venv`, installs `requirements.txt`, pulls `llama3.2:3b`        | Once after clone |
 | **run_game.bat**                  | Activates the venv and launches the game                                  | Every play session |
 | **run_demo.bat**                  | Scripted demo: `--demo --persona broke_bard --turns 4 --seed 1234`        | For video evidence |
-| **make_desktop_shortcut.bat**     | Creates a "Wandering Goblet" shortcut on your Desktop                     | Optional, once   |
+| **make_desktop_shortcut.bat**     | Creates a "The Tavern Master" shortcut on your Desktop                     | Optional, once   |
 
 ### Step-by-step
 

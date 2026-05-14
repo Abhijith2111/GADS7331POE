@@ -1,4 +1,4 @@
-"""Prompt builders for The Wandering Goblet.
+"""Prompt builders for The Tavern Master.
 
 Three families of prompt are produced here:
 
@@ -61,7 +61,7 @@ def _world_state_block(world_state: dict[str, Any]) -> str:
         quest_map = ""
 
     return (
-        f"Tavern name: The Wandering Goblet\n"
+        f"Tavern name: The Tavern Master\n"
         f"Player gold: {world_state.get('gold', 0)}\n"
         f"Tavern reputation: {rep_str}\n"
         f"Recent gossip already in town:\n{gossip_lines}"

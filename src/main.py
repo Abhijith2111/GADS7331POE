@@ -1,4 +1,4 @@
-"""The Wandering Goblet — entry point.
+"""The Tavern Master — entry point.
 
 Wires together the Pygame scene, the world state, persona rotation, and
 the Ollama client. LLM calls run on background threads and push events
@@ -74,7 +74,7 @@ from src.llm.parsers import (
 
 # Default matches first main-menu preset (Full HD).
 DEFAULT_SCREEN_SIZE: tuple[int, int] = (1920, 1080)
-TITLE = "The Wandering Goblet"
+TITLE = "The Tavern Master"
 ITEMS_PATH = Path("data") / "items.json"
 
 # Resizable: lets the OS maximize when the player snaps the window to the
@@ -523,7 +523,7 @@ class Game:
 
     def _show_stock_modal(self) -> None:
         """Read-only modal listing every item and its base price."""
-        body_lines = ["The Wandering Goblet's catalogue:", ""]
+        body_lines = ["The Tavern Master's catalogue:", ""]
         for item in self.items:
             body_lines.append(
                 f"  {item['name']:<28} {item['base_price']:>3} gold"
@@ -1751,7 +1751,7 @@ class Game:
     def _build_demo_script(self) -> list[str]:
         """Fixed sequence of player inputs for reproducible video evidence."""
         base = [
-            "Welcome to the Goblet. What brings you in tonight?",
+            "Welcome. What brings you in tonight?",
             "Quiet night. Hear any rumours on the road?",
             "/sell strong_stout 5",
             "/quest",

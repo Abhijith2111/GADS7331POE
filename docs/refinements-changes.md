@@ -5,6 +5,20 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-05-12 — Game title rebranded: **The Tavern Master**
+
+**Tag:** `scope`, `branding`, `prompt`
+**Source:** user request — replace **The Wandering Goblet** as the product and in-fiction tavern name. AI-assisted (Cursor).
+
+- **Window / argparse caption** and **main menu** title: `The Tavern Master` (`TITLE` in `src/main.py`).
+- **LLM world-state line** `Tavern name:` in `_world_state_block` (`src/llm/prompts.py`) updated so every chat/haggle/quest/gossip prompt sees the new name.
+- **Player-facing copy:** items catalogue header, demo welcome line, world-map banner **Leaving the Tavern** (was “Leaving the Goblet”).
+- **Docs:** `README.md`, `docs/high-concept.md`, `docs/llm-integration-report.md`, `docs/setup.md`, `docs/ollama-plan.md`, `docs/prompts-used.md` (Part I + rename note).
+- **Installers / shortcuts:** `setup.bat`, `make_desktop_shortcut.bat` strings and `.lnk` filename.
+- **Procedural music temp file** prefix `goblet_ambience_` → `tavern_ambience_` in `src/game/assets.py` (cosmetic; old temp files remain OS-cleaned).
+
+---
+
 ## 2026-05-12 — `prompts-used.md` + README: dual development / LLM archive
 
 **Tag:** `docs`

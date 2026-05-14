@@ -1,8 +1,8 @@
-# LLM Integration Report — The Wandering Goblet
+# LLM Integration Report — The Tavern Master
 
 ## Technical decisions and integration strategy
 
-The Wandering Goblet integrates a local large language model through
+The Tavern Master integrates a local large language model through
 [Ollama](https://ollama.com/) over its `localhost:11434` HTTP API. The
 default model is `llama3.2:3b`, swappable at runtime via `--model` or
 the in-game settings menu. The game is written in Python with Pygame,

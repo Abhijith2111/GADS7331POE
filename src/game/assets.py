@@ -207,7 +207,7 @@ class MusicPlayer:
         except Exception:
             return None
         tmp = tempfile.NamedTemporaryFile(
-            prefix="goblet_ambience_", suffix=".wav", delete=False
+            prefix="tavern_ambience_", suffix=".wav", delete=False
         )
         try:
             tmp.write(data)

@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 echo ============================================================
-echo   The Wandering Goblet - first-time setup
+echo   The Tavern Master - first-time setup
 echo ============================================================
 echo.
 

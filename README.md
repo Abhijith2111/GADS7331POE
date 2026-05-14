@@ -1,4 +1,4 @@
-# The Wandering Goblet
+# The Tavern Master
 
 A small Python/Pygame fantasy tavern simulator where every customer's
 dialogue, haggling, gossip, and quest offer is generated live by a
@@ -41,7 +41,7 @@ Optional extras:
 - **[run_demo.bat](run_demo.bat)** — double-click to launch the scripted
   demo session (fixed seed + prompt logs) used for video evidence.
 - **[make_desktop_shortcut.bat](make_desktop_shortcut.bat)** — run once
-  to drop a "Wandering Goblet" shortcut on your Desktop pointing at
+  to drop a "The Tavern Master" shortcut on your Desktop pointing at
   `run_game.bat`.
 
 The Quick Start below still works for any platform or for users who

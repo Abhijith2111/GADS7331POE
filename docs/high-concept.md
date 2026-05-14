@@ -1,11 +1,11 @@
-# High-Concept Document — The Wandering Goblet
+# High-Concept Document — The Tavern Master
 
 ## Pitch
 
 > *"Tend bar at the edge of an empire. Five regulars, an LLM in the
 > back room, and every conversation is one you've never had before."*
 
-**The Wandering Goblet** is a single-player tavern simulator where the
+**The Tavern Master** is a single-player tavern simulator where the
 player runs a small fantasy bar. Customers walk up to the counter one
 at a time, with hand-authored personas (a paranoid wizard, a broke
 bard, a smug noble, a gruff dwarf, a mysterious traveller). The player
@@ -95,7 +95,7 @@ to *what small models are best at*.
 
 ## Tone and audience
 
-The Goblet aims for a quiet, lived-in fantasy register — closer to
+The Tavern Master aims for a quiet, lived-in fantasy register — closer to
 *Disco Elysium*'s street-corner conversations than to a high-fantasy
 heroic epic. Target audience is "anyone who has spent more time in
 *Skyrim* taverns than in *Skyrim* dungeons."

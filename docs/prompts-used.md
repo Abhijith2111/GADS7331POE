@@ -1,9 +1,11 @@
-# Prompt & development archive — The Wandering Goblet
+# Prompt & development archive — The Tavern Master
 
 This file is the **single archive** for the project:
 
 1. **Part I — What you asked Cursor to add** (features, UI, tooling, docs, Git), with outcomes and provenance.
 2. **Part II — In-game LLM prompt testing** (Ollama): iterations, example outputs, verdicts, and reasoning.
+
+The game shipped under the working title **The Wandering Goblet** until it was **renamed to The Tavern Master** (see [refinements-changes.md](refinements-changes.md)). Older transcripts and commits may still use the former name.
 
 **Related docs:** [llm-integration-report.md](llm-integration-report.md) (integration overview), [refinements-changes.md](refinements-changes.md) (dated engineering log). **Source of truth for live prompts:** `src/llm/prompts.py`.
 
@@ -40,7 +42,7 @@ Requests are listed in **chronological order** (oldest first). Duplicate “plea
 | Date | Request (summary) | Outcome | Key files / commits | Provenance & notes |
 |------|-------------------|---------|---------------------|-------------------|
 | 2026-05-10 | Assignment brief: standalone game with **local LLM via Ollama**, reproducible integration, documentation (high concept, integration report, etc.) | Scoped course project; chose tavern sim + Pygame + Ollama | Full repo, `docs/*` | transcript; first user message in thread |
-| 2026-05-10 | **Implement “The Wandering Goblet”** initial plan (scaffold through docs) | Shipped playable prototype + docs + tests | `src/`, `docs/`, `data/` | transcript |
+| 2026-05-10 | **Implement “The Tavern Master”** initial plan (scaffold through docs; transcripts use *The Wandering Goblet*) | Shipped playable prototype + docs + tests | `src/`, `docs/`, `data/` | transcript |
 | 2026-05-11 | **How do I run the game / pull model / step 3 / Python not found** | Support & doc paths clarified | `README.md`, `docs/setup.md` | transcript; no feature code |
 | 2026-05-11 | **Pygame `pip install` fails** on Windows (source build / distutils) | Switched dependency to **pygame-ce** | `requirements.txt`, `docs/setup.md` | transcript + refinements |
 | 2026-05-11 | **More transparent** AI reply area; **player + name tag above** dialogue | UI updated | `src/game/*`, `src/main.py` | transcript; commit `e67bb7e` |
@@ -65,7 +67,7 @@ Requests are listed in **chronological order** (oldest first). Duplicate “plea
 | 2026-05-12 | **Default 1920×1080**, **Full HD** first preset; layout **above taskbar** (`bottom_reserve`) | Main menu order, pause sync | `src/main.py`, `src/game/main_menu.py`, `src/game/pause_menu.py` | git `09f6856`; `(reconstructed)` ask text |
 | 2026-05-12 | Fix **`NameError: MainMenu`** / imports | Import and wiring fix | `src/main.py` | git `b3e154a` |
 | 2026-05-12 | **Resizable window**; snap to top **maximizes** and reflows UI | `pygame.RESIZABLE`, `VIDEORESIZE`, `_apply_window_dimensions` | `src/main.py`, `src/game/main_menu.py` | git `ea6e307`; transcript summary `(reconstructed)` |
-| 2026-05-12 | **Expand `prompts-used.md`** into dual archive (asks + LLM tests) | This document | `docs/prompts-used.md` | current task |
+| 2026-05-12 | **Rename game** to **The Tavern Master** (window, LLM tavern name, UI strings, docs, shortcuts) | Shipped | `src/main.py`, `src/llm/prompts.py`, `src/game/world_map.py`, `docs/*`, batch files | user request |
 
 > **Detail:** Many rows above are expanded in [refinements-changes.md](refinements-changes.md) with tags and rationale. Use that file for deep dives; Part I stays scannable.
 

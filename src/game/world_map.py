@@ -334,7 +334,7 @@ class WorldMapScene:
         surface.blit(bg, self.rect.topleft)
 
         # Title.
-        title = self.title_font.render("Leaving the Goblet", True, (236, 222, 196))
+        title = self.title_font.render("Leaving the Tavern", True, (236, 222, 196))
         surface.blit(
             title,
             (self.rect.centerx - title.get_width() // 2, self.rect.top + 20),
