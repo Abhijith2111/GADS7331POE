@@ -50,7 +50,7 @@ from src.game.ui import (
     TransparencyBanner,
     wrap_text,
 )
-from src.game.market import MARKET_OFFERS
+from src.game.main_menu import MainMenu
 from src.game.world_map import LocationScene, WorldMapScene
 from src.game.world_map_data import WHOLESALE_MARKET_ID, get_hotspot, get_location
 from src.game.world_state import WorldState
@@ -70,9 +70,8 @@ from src.llm.parsers import (
     parse_quest,
 )
 
-# Taller default window so the tavern scene + full-height action column
-# fit comfortably; all buttons stay on-screen without scrolling.
-SCREEN_SIZE = (1280, 880)
+# Default window size matches the first main-menu preset (Balanced).
+DEFAULT_SCREEN_SIZE: tuple[int, int] = (1280, 880)
 TITLE = "The Wandering Goblet"
 ITEMS_PATH = Path("data") / "items.json"
 
@@ -183,10 +182,16 @@ WRONG_CLICK_LINES: dict[int, list[str]] = {
 # Game
 # ---------------------------------------------------------------------------
 class Game:
-    def __init__(self, args: argparse.Namespace) -> None:
+    def __init__(
+        self,
+        args: argparse.Namespace,
+        *,
+        screen_size: tuple[int, int] | None = None,
+    ) -> None:
         pygame.init()
         pygame.display.set_caption(TITLE)
-        self.screen = pygame.display.set_mode(SCREEN_SIZE)
+        self.screen_size = screen_size or DEFAULT_SCREEN_SIZE
+        self.screen = pygame.display.set_mode(self.screen_size)
         self.clock = pygame.time.Clock()
         self.font = load_font(20)
         self.title_font = load_font(46, bold=True)
@@ -195,7 +200,7 @@ class Game:
         self.demo_persona = args.persona
 
         self.world = WorldState.load()
-        self.scene = TavernScene(SCREEN_SIZE)
+        self.scene = TavernScene(self.screen_size)
         self.sfx = SoundLibrary()
         # Background music: procedural ambient pad by default, overridable
         # by any file in assets/music/. Off automatically in --demo mode
@@ -259,7 +264,7 @@ class Game:
             return list(json.load(fh)["items"])
 
     def _init_ui(self) -> None:
-        sw, sh = SCREEN_SIZE
+        sw, sh = self.screen_size
         margin = 20
         dialogue_h = 240
         input_h = 48
@@ -303,7 +308,7 @@ class Game:
             anchor=(action_x, action_y + 6)
         )
         self.banner = TransparencyBanner(sw)
-        self.modal = ModalPanel(SCREEN_SIZE, (720, 520))
+        self.modal = ModalPanel(self.screen_size, (720, 520))
         self.help_visible = False
 
         # Sell flow state (active while the sell modal is open).
@@ -1979,7 +1984,7 @@ class Game:
         font = load_font(14)
         text = "F1 help   F2 settings   F5 next customer   T banner   Esc quit"
         surf = font.render(text, True, (180, 140, 70))
-        self.screen.blit(surf, (20, SCREEN_SIZE[1] - 18))
+        self.screen.blit(surf, (20, self.screen_size[1] - 18))
 
 
 # ---------------------------------------------------------------------------
@@ -2014,12 +2019,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=4,
         help="How many scripted turns to run in --demo mode",
     )
+    parser.add_argument(
+        "--skip-menu",
+        action="store_true",
+        help="Skip the main menu and use the default window size",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    return Game(args).run()
+    pygame.init()
+    pygame.display.set_caption(TITLE)
+    clock = pygame.time.Clock()
+
+    if args.demo or args.skip_menu:
+        screen_size = DEFAULT_SCREEN_SIZE
+    else:
+        menu = MainMenu(clock=clock, title=TITLE)
+        picked = menu.run()
+        if picked is None:
+            pygame.quit()
+            return 0
+        screen_size = picked
+
+    return Game(args, screen_size=screen_size).run()
 
 
 if __name__ == "__main__":
