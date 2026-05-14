@@ -72,8 +72,8 @@ from src.llm.parsers import (
     parse_quest,
 )
 
-# Default window size matches the first main-menu preset (Balanced).
-DEFAULT_SCREEN_SIZE: tuple[int, int] = (1280, 880)
+# Default matches first main-menu preset (Full HD).
+DEFAULT_SCREEN_SIZE: tuple[int, int] = (1920, 1080)
 TITLE = "The Wandering Goblet"
 ITEMS_PATH = Path("data") / "items.json"
 
@@ -288,6 +288,9 @@ class Game:
         status_h = 60
         side_panel_w = 220
         side_gap = 12
+        # Extra space at the bottom so the input bar stays above the taskbar
+        # on 1080p-style layouts (and with window decorations).
+        bottom_reserve = max(margin, min(88, int(sh * 0.085)))
 
         self.status_bar = StatusBar(
             pygame.Rect(margin, margin + 26, sw - margin * 2, status_h)
@@ -297,20 +300,20 @@ class Game:
         self.dialogue = DialogueBox(
             pygame.Rect(
                 margin,
-                sh - margin - input_h - 12 - dialogue_h,
+                sh - bottom_reserve - input_h - 12 - dialogue_h,
                 chat_w,
                 dialogue_h,
             )
         )
         self.text_input = TextInput(
-            pygame.Rect(margin, sh - margin - input_h, chat_w, input_h),
+            pygame.Rect(margin, sh - bottom_reserve - input_h, chat_w, input_h),
             submit_cb=self._on_player_submit,
         )
 
         scene_top = margin + 26 + status_h + 8
         action_x = margin + chat_w + side_gap
         action_y = scene_top
-        action_h = sh - margin - action_y
+        action_h = sh - bottom_reserve - action_y
         self.actions = ActionPanel(
             pygame.Rect(action_x, action_y, side_panel_w, action_h)
         )
@@ -326,7 +329,7 @@ class Game:
             margin,
             margin + 26 + status_h + 8,
             sw - margin * 2 - side_panel_w - side_gap,
-            sh - margin - (margin + 26 + status_h + 8),
+            sh - bottom_reserve - (margin + 26 + status_h + 8),
         )
         self.world_map_scene = WorldMapScene(canvas_rect)
         self.location_scene = LocationScene(canvas_rect)
@@ -2021,7 +2024,10 @@ class Game:
         font = load_font(14)
         text = "F1 help   F2 settings   F5 next customer   T banner   Esc pause"
         surf = font.render(text, True, (180, 140, 70))
-        self.screen.blit(surf, (20, self.screen_size[1] - 18))
+        # Sit just above the input bar so the hint stays visible with taskbars.
+        target_y = self.text_input.rect.top - 6 - surf.get_height()
+        y = max(72, min(target_y, self.screen_size[1] - 24 - surf.get_height()))
+        self.screen.blit(surf, (20, y))
 
 
 # ---------------------------------------------------------------------------

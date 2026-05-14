@@ -100,7 +100,7 @@ class PauseMenu:
         surface.blit(title, (pr.centerx - title.get_width() // 2, pr.top + 18))
 
         sub = self.body_font.render(
-            "Aspect ratio (height 880 — pick what fits your monitor):",
+            "Window size (default is Full HD; pick what fits your monitor):",
             True,
             PARCHMENT,
         )

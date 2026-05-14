@@ -11,8 +11,7 @@ from .ui import HIGHLIGHT, INK_SOFT, PARCHMENT
 
 MENU_WINDOW_SIZE = (960, 640)
 
-# Shared vertical resolution keeps UI proportions comparable across aspects;
-# width follows the chosen ratio (even pixel width for drivers).
+# Shared vertical resolution for compact presets (taller screens use explicit WxH).
 _BASE_H = 880
 
 
@@ -29,8 +28,9 @@ class AspectOption:
 
 
 ASPECT_OPTIONS: tuple[AspectOption, ...] = (
-    AspectOption("Balanced (default)", 1280, _BASE_H),
-    AspectOption("16:9 widescreen", _even_w(int(round(_BASE_H * 16 / 9))), _BASE_H),
+    AspectOption("Full HD 1920×1080 (recommended)", 1920, 1080),
+    AspectOption("Balanced 1280×880", 1280, _BASE_H),
+    AspectOption("16:9 widescreen (1564×880)", _even_w(int(round(_BASE_H * 16 / 9))), _BASE_H),
     AspectOption("16:10", _even_w(int(round(_BASE_H * 16 / 10))), _BASE_H),
     AspectOption("4:3", _even_w(int(round(_BASE_H * 4 / 3))), _BASE_H),
     AspectOption("21:9 ultrawide", _even_w(int(round(_BASE_H * 21 / 9))), _BASE_H),
