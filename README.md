@@ -185,6 +185,8 @@ GADS7331POE/
    └─ test_parsers.py
 ```
 
+[`docs/prompts-used.md`](docs/prompts-used.md) is the **combined archive**: Part I logs what was asked for in Cursor (features and tooling), Part II logs Ollama prompt iterations; the appendix shows how to dump current prompts with `render_for_log`.
+
 Run the test suite with `pytest -q`.
 
 ---

@@ -1,13 +1,81 @@
-# Prompt Archive
+# Prompt & development archive — The Wandering Goblet
 
-Every prompt iteration tested during development. Each entry lists the
-prompt, an example output (good or bad), the verdict, and what we did
-next. Entries are ordered chronologically so the iteration story is
-visible in sequence.
+This file is the **single archive** for the project:
 
-> Prompts referenced as "current" are the ones still in
-> `src/llm/prompts.py` at submission. Older iterations are kept here as
-> evidence of the design process.
+1. **Part I — What you asked Cursor to add** (features, UI, tooling, docs, Git), with outcomes and provenance.
+2. **Part II — In-game LLM prompt testing** (Ollama): iterations, example outputs, verdicts, and reasoning.
+
+**Related docs:** [llm-integration-report.md](llm-integration-report.md) (integration overview), [refinements-changes.md](refinements-changes.md) (dated engineering log). **Source of truth for live prompts:** `src/llm/prompts.py`.
+
+---
+
+## How to maintain this file
+
+- After a **significant Cursor session**, append a row to **Part I** (and, if you changed prompt text, a bullet under **Part II**).
+- **Provenance tags:** `transcript` = recovered from a Cursor agent transcript JSONL; `refinements` = summarized from [refinements-changes.md](refinements-changes.md); `git` = inferred from commit message only; `(reconstructed)` = best-effort memory when no primary source was available.
+- **Cursor transcripts** for this project live outside the repo (e.g. under the IDE’s `agent-transcripts` folder for this workspace). They are not auto-synced to Git.
+
+### Template — Part I row
+
+```text
+| YYYY-MM-DD | One-line request | shipped / partial / n/a (support only) | key files or commits | provenance; short notes |
+```
+
+### Template — Part II prompt test
+
+```text
+### Xn — Short title
+**Prompt / change:** …
+**Example (good or bad):** …
+**Verdict:** …
+**Reasoning / next step:** …
+```
+
+---
+
+## Part I — Development request history (Cursor asks → outcomes)
+
+Requests are listed in **chronological order** (oldest first). Duplicate “please push to GitHub” lines are folded into the nearest feature row where obvious.
+
+| Date | Request (summary) | Outcome | Key files / commits | Provenance & notes |
+|------|-------------------|---------|---------------------|-------------------|
+| 2026-05-10 | Assignment brief: standalone game with **local LLM via Ollama**, reproducible integration, documentation (high concept, integration report, etc.) | Scoped course project; chose tavern sim + Pygame + Ollama | Full repo, `docs/*` | transcript; first user message in thread |
+| 2026-05-10 | **Implement “The Wandering Goblet”** initial plan (scaffold through docs) | Shipped playable prototype + docs + tests | `src/`, `docs/`, `data/` | transcript |
+| 2026-05-11 | **How do I run the game / pull model / step 3 / Python not found** | Support & doc paths clarified | `README.md`, `docs/setup.md` | transcript; no feature code |
+| 2026-05-11 | **Pygame `pip install` fails** on Windows (source build / distutils) | Switched dependency to **pygame-ce** | `requirements.txt`, `docs/setup.md` | transcript + refinements |
+| 2026-05-11 | **More transparent** AI reply area; **player + name tag above** dialogue | UI updated | `src/game/*`, `src/main.py` | transcript; commit `e67bb7e` |
+| 2026-05-11 | **Side action buttons** instead of only slash commands | Action panel + modals; slash kept as shortcut | `src/main.py`, `src/game/ui.py` | transcript; `8a354f1` |
+| 2026-05-11 | **Easier launch** than PowerShell every time | `.bat` one-click launchers | `run_game.bat`, `setup.bat` | transcript; `1c4b79f` |
+| 2026-05-11 | **Remove the line from NPC faces** | Portrait highlight tweak | `src/game/scene.py` (per commit) | transcript; `8aed7e8` |
+| 2026-05-11 | **Leave the bar** + **map exploration**: mines, town, outskirts, castle; click hotspots; quest target visible | World map + location scenes + quest `location`/`hotspot` | `src/game/world_map*.py`, `src/main.py`, `src/llm/prompts.py` | transcript + refinements; `1144c13` |
+| 2026-05-11 | **Crash** in `toasts.draw` / `font.render` when leaving bar | Fixed toast arg / typing | `src/main.py`, `src/game/ui.py` | transcript; `80489c9` |
+| 2026-05-11 | **Satire / attitude** when searching wrong hotspot (“you just checked…”) | Escalating wrong-click copy | `src/main.py` or world scene | transcript; `530d26c` |
+| 2026-05-12 | **Auto-connect to Ollama** on launch (daemon, pull, warm-up) | Bootstrap worker + Windows path discovery | `src/llm/ollama_client.py`, `src/main.py` | transcript + refinements; `db1378b` |
+| 2026-05-12 | **Background music** overall | `MusicPlayer`, `pygame.mixer.music`, mute **M** | `src/game/assets.py`, `src/main.py` | transcript + refinements; `1c09b1d` |
+| 2026-05-12 | **View quests** + **view gossip**; **sell** a patron info **about themselves** for player-chosen price | Quest/gossip journals; `build_gossip_buy_messages` + rep trade-off | `src/main.py`, `src/llm/prompts.py` | transcript + refinements; `597374c` |
+| 2026-05-12 | Action column **clips** — show **all buttons** or taller window | Full-height action panel; flexible row heights; default height tweak | `src/game/ui.py`, `src/main.py` | transcript + refinements; `65bc895` |
+| 2026-05-12 | Gossip about **other people**: **sell intel** or **give (Spread)** to seed rumours | `build_gossip_intel_messages`, Spread flow, persona name resolution | `src/llm/prompts.py`, `src/game/npc.py`, tests | transcript + refinements; `ca1da4a` |
+| 2026-05-12 | Quests should use **different map regions**, not one region only | `QUEST_RULES` + `WorldState.to_prompt_dict` map hints | `src/llm/prompts.py`, world state | transcript + refinements; `ed44466` |
+| 2026-05-12 | Gossip modal: text **stays inside brown panel**; **word-wrap** at edge | Modal layout / wrap fixes | `src/game/ui.py` (modal) | transcript |
+| 2026-05-12 | **Leave the bar** disappeared; add **market** for tavern supplies | Restored leave flow; market | `src/main.py`, world map | transcript; `dd455ab` |
+| 2026-05-12 | Market as **map location** (e.g. Wholesale Row), **not** another tavern button | World map destination | `src/game/world_map*.py` | transcript; `affb790` |
+| 2026-05-12 | **Main menu** with **aspect ratio / resolution** presets | `MainMenu` before play | `src/game/main_menu.py`, `src/main.py` | transcript; `7128d41` |
+| 2026-05-12 | **Pause menu**: change **aspect / resolution** to fit screen | Pause UI relayout | `src/game/pause_menu.py` | transcript |
+| 2026-05-12 | Use audio under project **`Music/`** for BGM | Resolve `Music/` before `assets/music/` | `src/game/assets.py` | transcript + git; `b3e154a` / follow-ups |
+| 2026-05-12 | **Default 1920×1080**, **Full HD** first preset; layout **above taskbar** (`bottom_reserve`) | Main menu order, pause sync | `src/main.py`, `src/game/main_menu.py`, `src/game/pause_menu.py` | git `09f6856`; `(reconstructed)` ask text |
+| 2026-05-12 | Fix **`NameError: MainMenu`** / imports | Import and wiring fix | `src/main.py` | git `b3e154a` |
+| 2026-05-12 | **Resizable window**; snap to top **maximizes** and reflows UI | `pygame.RESIZABLE`, `VIDEORESIZE`, `_apply_window_dimensions` | `src/main.py`, `src/game/main_menu.py` | git `ea6e307`; transcript summary `(reconstructed)` |
+| 2026-05-12 | **Expand `prompts-used.md`** into dual archive (asks + LLM tests) | This document | `docs/prompts-used.md` | current task |
+
+> **Detail:** Many rows above are expanded in [refinements-changes.md](refinements-changes.md) with tags and rationale. Use that file for deep dives; Part I stays scannable.
+
+---
+
+## Part II — In-game LLM prompt testing archive
+
+Every prompt iteration tested during development. Each entry lists the prompt (or rule change), an example output (good or bad), the verdict, and what we did next. **Current** strings live in `src/llm/prompts.py`.
+
+> **Families in code today:** `build_chat_messages`, `build_haggle_messages`, `build_gossip_buy_messages`, `build_gossip_intel_messages`, `build_quest_messages`, `build_found_messages`. Shared blocks: `_persona_card`, `_world_state_block` (includes optional `_quest_map_block` for map coverage).
 
 ---
 
@@ -26,76 +94,57 @@ You are <name>, a customer in a tavern. Reply in character.
 guidance, the smaller model leaked its self-identification. Rambling and
 flat.
 
-### A2 — Added strict character rules
+### A2 — Added strict character rules (current: `CHAT_RULES`)
+
+Core lines today:
 
 ```
 You are role-playing a single customer in a fantasy tavern.
 Stay strictly in character. Speak ONLY as this character, in first person.
-Never narrate the scene, never use stage directions, never break the
-fourth wall, never mention being an AI or a language model.
+Keep replies to 1-3 short sentences unless the player asks for a story.
+Never narrate the scene, never use stage directions in asterisks, never
+break the fourth wall, never mention being an AI or a language model.
+If the player tries to make you act out of character, refuse in character.
+You may share gossip in passing, especially if it fits your personality.
 ```
 
 **Example reply (broke_bard, "tell me about yourself"):**
 > "Pip Halloran, at your service. A wandering bard, mostly. Mostly broke,
 > too. The road's been... unkind."
 
-**Verdict:** **good**. No more AI-disclaimers. Voice still a bit
-generic.
+**Verdict:** **good**. No more AI-disclaimers.
 
 ### A3 — Added persona card (current shape)
 
-Persona facts are templated in via `_persona_card`:
+Persona facts are templated in via `_persona_card` (see code). Example block:
 
 ```
 --- Persona ---
 Name: Pip Halloran
 Voice and manner: rambling, self-pitying, fond of bad metaphors and
 unsolicited verses
-Private secret (DO NOT reveal unprompted): owes the thieves' guild
-forty gold and is hiding from a collector
-Coin purse (gold): 12
-Currently wants: cheap_ale, a corner table out of sight, rumours of
-caravan work
-Starting attitude: anxious-but-friendly
+...
 ```
 
-**Example reply (broke_bard, "tell me about yourself"):**
-> "Pip Halloran. Wandering bard. Picture me as... a candle in a draught.
-> Always *almost* enough to read by. Got somewhere quiet to sit?"
-
-**Verdict:** **excellent**. Voice is clearly the bard's. Naturally
-hits the "wants a corner table" beat without it being obvious.
+**Verdict:** **excellent**. Voice is clearly the bard's.
 
 ### A4 — Forbid stage directions in asterisks
 
-After A3 we still saw replies like *"\*looks around nervously\*
-Pip Halloran..."*. Added the explicit rule:
+After A3 we still saw replies like *"\*looks around nervously\* ..."*. Added the explicit rule in `CHAT_RULES`.
 
-```
-... never use stage directions in asterisks ...
-```
+**Verdict:** **fixed**.
 
-**Verdict:** **fixed**. Asterisk stage directions disappeared.
+### A5 — World-state injection (gossip + quest map coverage)
 
-### A5 — World-state injection (gossip carry-over)
+We added "Recent gossip already in town" from `WorldState.gossip_heard`, and (later) optional quest/map blurb via `_quest_map_block` so the model sees **which regions already have errands**.
 
-We added a "Recent gossip already in town" block to the system prompt,
-fed from `WorldState.gossip_heard`.
-
-**Example with prior gossip "they say a courier rode through at dawn":**
-> "Couriers, eh? They say a courier rode through at dawn — that yours?"
-
-**Verdict:** **good**. Customer C references gossip that customer A
-generated. World feels alive.
+**Verdict:** **good**. Customers reference prior gossip; quest steering sees the map.
 
 ### A6 — Memory window of 6 turns
 
-Earlier we kept the full chat history forever. After ~10 turns the
-prompt got long and latency rose. Capped at 6 turns
-(`CHAT_MEMORY_TURNS=6`).
+Capped at 6 turns (`CHAT_MEMORY_TURNS=6`).
 
-**Verdict:** **good**. No visible degradation in coherence, prompt size
-is bounded.
+**Verdict:** **good**. Bounded latency; persona re-injection keeps voice stable.
 
 ---
 
@@ -103,81 +152,28 @@ is bounded.
 
 ### B1 — Free-text "yes/no"
 
-First attempt asked for plain text and parsed with regex:
-
-```
-The shopkeeper offers <item> for <N> gold. Do you accept?
-```
-
-**Example reply:**
-> "I'll accept it for 5, but only if you throw in a song."
-
-**Verdict:** **failed**. Got conditional acceptances, ambiguous
-counter-offers ("how about half that?"). Too brittle to parse.
+**Verdict:** **failed**. Ambiguous counter-offers; brittle parsing.
 
 ### B2 — JSON in fenced code block
 
-```
-Reply with a JSON object inside a markdown code fence.
-```
+**Verdict:** **partial**. Fence drift and prose around JSON.
 
-**Example reply:**
-> ```json
-> {"accept": false, "counter_offer": 5, "line": "Five, no more."}
-> ```
+### B3 — `format: "json"` plus explicit schema (current `HAGGLE_RULES`)
 
-**Verdict:** **partial**. The fence sometimes drifted; sometimes
-the model added prose around it.
-
-### B3 — `format: "json"` plus explicit schema (current)
-
-We switched to Ollama's `format: "json"` mode and described the
-schema *inside* the system prompt:
-
-```
-Reply with ONLY a JSON object matching this schema, no prose, no
-markdown fences:
-{
-  "accept": boolean,
-  "counter_offer": integer|null,
-  "line": string,
-  "walk_away": boolean
-}
-```
+Schema in the system prompt matches `HAGGLE_RULES` in code (accept, counter_offer, line, walk_away; rules for purse and fair price).
 
 **Example reply:**
 > `{"accept": false, "counter_offer": 4, "line": "Four. Final.", "walk_away": false}`
 
-**Verdict:** **excellent**. ~98 % clean-parse rate on the default model
-across our test suite. The 2 % goes through `extract_json_object`
-recovery and never reaches the degrade path in practice.
+**Verdict:** **excellent**. ~98% clean-parse; remainder saved by `extract_json_object`.
 
 ### B4 — Explicit "fair price" and "absolute maximum" lines
 
-Initially the prompt gave only `budget_gold`. The model accepted
-unrealistic deals because it had no concept of "what is this item
-*actually* worth to me".
-
-```
-Your private fair price (your floor): <floor> gold.
-Your absolute maximum (coin purse): <budget> gold.
-```
-
-**Verdict:** **good**. Counter-offers cluster near the floor. Hard
-clamps in `parse_haggle` catch the rare model that ignores the line.
+**Verdict:** **good**. Clamps in `parse_haggle` still enforce invariants.
 
 ### B5 — Negotiation history block
 
-Added a small block listing previous offers and the customer's replies
-in this negotiation:
-
-```
---- Negotiation so far ---
-  - Player offered 8 gold; you replied: "Eight? My grandmother..."
-```
-
-**Verdict:** **good**. The model now riffs on its earlier stance instead
-of resetting between rounds.
+**Verdict:** **good**. Model maintains stance across rounds.
 
 ---
 
@@ -185,82 +181,46 @@ of resetting between rounds.
 
 ### C1 — Open-ended "give me a quest"
 
-```
-Generate a quest the customer asks the keeper to do.
-```
-
-**Example reply:**
-> "Find the Crown of Eternal Frost in the Forgotten Catacombs of
-> Y'haz'roth, beneath the cursed temple ..."
-
-**Verdict:** **failed**. Wildly out of scale for a tavern errand.
-Inconsistent reward values. Sometimes referenced modern objects
-("an old phone").
+**Verdict:** **failed**. Epic scope, modern refs, inconsistent rewards.
 
 ### C2 — Constrained schema + range
 
-```
-- The quest must be plausible for a fantasy tavern errand.
-- reward_gold must be a whole integer in [5, 40].
-- Stay in the persona's voice in 'summary'.
-- Never reference modern objects or real-world locations.
-```
-
-**Example reply (broke_bard):**
-> `{"title":"A Lute Recovered","summary":"Find my lute, will you? Left
-> it at the bridge; can't bring myself to look.","target":"the eastern
-> bridge","reward_gold":10,"danger":"low"}`
-
-**Verdict:** **excellent**. In voice. Plausibly tavern-scaled. Schema
-reliable.
+**Verdict:** **excellent**. Tavern-scale quests; schema reliable.
 
 ### C3 — Danger enum
 
-Originally `danger` was free text: `"low"`, `"low/medium"`, `"medium-
-ish"`, etc. Added enum coercion in the validator:
+Coercion in validator if not `low|medium|high`.
 
-```python
-if v not in {"low", "medium", "high"}: return "low"
-```
-
-**Verdict:** **good**. Game can colour quests by danger reliably.
+**Verdict:** **good**.
 
 ### C4 — Locations + hotspots (exploration mode)
 
-When we added the exploration mode, the quest schema needed two new
-fields: the LLM has to choose *where* in the world the player will go.
-We extended the system prompt with a rendered table of all four
-locations (id, name, blurb, and their four hotspot ids):
-
-```
---- Locations available in this game ---
-- mines (The Old Mines): Dark tunnels east of town, abandoned twenty years.
-    hotspots:
-      - main_shaft (Main Shaft)
-      - collapsed_tunnel (Collapsed Tunnel)
-      ...
-- town (Town Square): Cobbled square, market stalls, the apothecary.
-    hotspots:
-      ...
-```
-
-The output schema gained `"location"` and `"hotspot"` fields. The
-prompt explicitly instructs the model to pick a location that *fits*
-the narrative target ("if the target is a missing pickaxe, the mines
-fit better than the castle"). The Pydantic validator clamps unknown
-locations to `outskirts` and clamps a hotspot from the wrong location
-to the chosen location's first hotspot, so a wandering model can
-never make a quest unreachable.
+Rendered table from `render_locations_for_prompt()`; quest gains `location` and `hotspot`; Pydantic clamps bad ids.
 
 **Example reply (broke_bard):**
-> `{"title":"A Lute Recovered","summary":"Find my lute, will you? Left
-> it by the broken bridge; can't bring myself to look.","target":"the
-> eastern bridge","reward_gold":10,"danger":"low","location":"outskirts",
-> "hotspot":"broken_bridge"}`
+> `{"title":"A Lute Recovered",...,"location":"outskirts","hotspot":"broken_bridge"}`
 
-**Verdict:** **excellent**. The default model picked sensible
-location/hotspot pairs in roughly 9/10 generations; the validator
-silently fixed the 1/10 that didn't.
+**Verdict:** **excellent**. ~9/10 sensible pairs; validator fixes the rest.
+
+### C5 — Spread work across map regions (current `QUEST_RULES` + user hint)
+
+**Problem:** New quests kept clustering in one region.
+
+**Prompt change:** `QUEST_RULES` now instructs the model to prefer `mines` / `town` / `outskirts` / `castle_hall` that **do not yet have an open errand** when the story still fits. `WorldState.to_prompt_dict` injects `map_regions_open_for_new_quest` / `map_regions_used_by_quests` and a human-readable **quest map** into `_world_state_block` via `_quest_map_block`.
+
+**User message hint:** `build_quest_messages` appends a dynamic line such as  
+`Prefer location one of: town, castle_hall — those map areas have no open errand yet.`  
+when regions remain unused.
+
+**Example (synthetic — representative good output):**
+> JSON with `"location": "castle_hall"` while `mines`, `town`, and `outskirts` already hold active quests — matches the “spread” intent.
+
+**Example (synthetic — weak output):**
+> Third quest in a row sets `"location": "mines"` while other regions are free and the target is not mining-specific.
+
+**Verdict:** **good** with **code + prompt** together; hints reduce clustering without forbidding valid repeats.
+
+**Reasoning:** LLMs habit-repeat; explicit unused-region list + map blurb beats a vague “vary locations” line alone.
 
 ---
 
@@ -268,43 +228,68 @@ silently fixed the 1/10 that didn't.
 
 ### D1 — First attempt: free text
 
-```
-Write a short line describing the moment the keeper finds the item.
-```
+**Verdict:** **failed**. Meta-narration, wrong POV.
 
-**Example reply:**
-> "Sure, here is a line: 'After much searching, the brave hero finally
-> located the mysterious object hidden in the dark recess of the
-> ancient cave...'"
+### D2 — JSON-mode + `FOUND_RULES` + item phrase (current)
 
-**Verdict:** **failed**. Stage-narrator voice, mentioned "the hero"
-instead of speaking to the keeper, returned prose around the line.
-
-### D2 — JSON-mode + persona + item phrase (current)
-
-We extract a noun phrase from the quest summary using a small regex
-(see `extract_item_phrase` in `parsers.py`) and pass it in along with
-the location and hotspot *names* (not ids). The system prompt:
+`FOUND_RULES` in code (abridged):
 
 ```
-FOUND_RULES = """You write ONE short narrative line describing the
-moment the tavern keeper finds the item ... second-person voice ...
-Reply with ONLY a JSON object: { "line": string }"""
-
-USER: The keeper has just reached the Rusty Miner's Cart at The Old
-Mines and located the lost lute. Write the in-the-moment narration
-as JSON only.
+You write ONE short narrative line describing the moment
+the tavern keeper finds the item the customer asked for. Reply with ONLY
+a JSON object:
+{ "line": string }   // 1-2 sentences, max 40 words, second-person voice
+Rules:
+- Speak to the keeper as the narrator: "You spot...", "You ease open...".
+- Mention the item phrase given below at least once.
+- Mention the location and the specific spot in the same line.
+...
 ```
+
+**User message shape:**  
+`The keeper has just reached the {hotspot_name} at {location_name} and located {item_phrase}. Write the in-the-moment narration as JSON only.`
 
 **Example reply:**
 > `{"line":"You ease the cart's lid back and there it is, the lost
 > lute, dust-furred but whole."}`
 
-**Verdict:** **excellent**. Second person, mentions the item phrase,
-mentions the hotspot, stays in one or two sentences. The
-`DEGRADED_FOUND` fallback ("You find what they asked for, tucked
-away.") covers the rare parse miss so the player is never soft-locked
-at the end of a quest.
+**Verdict:** **excellent**. `DEGRADED_FOUND` covers rare parse failures.
+
+---
+
+## G. Gossip-buy — sell a rumour **about the listener** (`GOSSIP_BUY_RULES`)
+
+**Use case:** From the gossip journal, the keeper offers dirt **about the seated customer** for **N** gold; reply uses **same schema as haggle** (`HaggleDecision`) and `parse_haggle` clamps.
+
+**Prompt intent (summary):** The rumour is **ABOUT YOU**; decide pay / counter / walk away based on damage to you; stay in character; *“The keeper is selling YOU on YOU; do not pretend the rumour is about someone else.”*
+
+**Example (good — representative):**
+> `{"accept": false, "counter_offer": 3, "line": "Three. I need to know what they're saying.", "walk_away": false}`
+
+**Example (bad — representative failure mode before rule tightening):**
+> Line treats the rumour as generic tavern chatter *not about the patron*, underpricing urgency.
+
+**Verdict:** **good** after explicit “about YOU” + schema reuse.
+
+**Reasoning:** Reusing haggle JSON + clamps avoids a third parser; clear POV prevents the model from “stepping out” of the customer’s shoes.
+
+---
+
+## H. Gossip-intel — sell dirt **about named others** (`GOSSIP_INTEL_RULES`)
+
+**Use case:** Journal line names **other** patrons; keeper sells **intel** to the current customer; accept does **not** apply the “sold their own secret” townsfolk penalty (per game design in refinements).
+
+**Prompt intent (summary):** Rumour is **NOT about you**; subjects are locals / rivals; pay if juicy or useful to you.
+
+**Example (good — representative):**
+> `{"accept": true, "counter_offer": null, "line": "I've been waiting to hear something on him. Done.", "walk_away": false}`
+
+**Example (bad — representative):**
+> Customer speaks as if **they** are the subject of the rumour (confusion with gossip-buy).
+
+**Verdict:** **good** with separate rule block from gossip-buy.
+
+**Reasoning:** Splitting **self** vs **third-party** prompts kept accept/refuse economics and tone consistent.
 
 ---
 
@@ -312,40 +297,41 @@ at the end of a quest.
 
 ### E1 — Asking the LLM to track gold itself
 
-For one afternoon we let the chat prompt include "you may declare
-gold gained" and parsed those declarations. The model invented and
-duplicated transactions. Reverted: gold is mutated only by code.
+**Verdict:** **failed / reverted**. Model invented transactions; gold is code-only.
 
 ### E2 — Single combined prompt for chat + haggle
 
-We tried having the chat path optionally emit a haggle block at the
-end (`<HAGGLE> ... </HAGGLE>`). It worked maybe 70 % of the time;
-30 % of the time the closing tag was missing. Splitting into two
-explicit endpoints fixed this completely.
+`<HAGGLE>` tags ~70% reliable.
 
-### E3 — Higher temperature for variety
+**Verdict:** **failed**. Split endpoints won.
 
-Pushed chat temperature to 1.2 in search of more flavour. Lines became
-incoherent and broke character. Reverted to 0.8 (current default).
+### E3 — Higher temperature (1.2) for chat
+
+**Verdict:** **failed**. Broke character; reverted to ~0.8.
 
 ### E4 — Persona-specific system prompts per file
 
-Idea: store the *whole* system prompt inside each persona JSON.
-Rejected because: (a) it duplicates the rules across 5 files, so a
-fix has to be repeated five times; (b) it lets a faulty persona file
-silently disable the safety rules. Current shape — shared rules +
-templated persona card — is safer and more maintainable.
+**Verdict:** **rejected**. Duplicates safety rules; risky maintenance.
 
 ---
 
 ## F. Iteration notes
 
-- Around 60 % of prompt time was spent on the chat path's tone.
-  Once the persona card shape settled, voices stabilised quickly.
-- Around 30 % was on JSON-mode reliability — schema, enums, clamps.
-- The remaining ~10 % was gossip detection (string heuristic) and
-  retry/degrade plumbing.
+- ~60% of prompt iteration time: **chat tone** and persona anchoring.
+- ~30%: **JSON reliability** (schema, enums, `extract_json_object`, Pydantic clamps).
+- ~10%: gossip **detection heuristic** (`_extract_gossip`), retry/degrade plumbing, and **gossip negotiation** prompts (Part G–H).
 
-The biggest qualitative leap was **A3 + A5 together**: persona card +
-world-state block. With both in place, the customers feel embedded in
-a world rather than dropped into an empty room.
+**Largest leap:** **Persona card + world state** (gossip and later quest-map context). Customers feel embedded instead of isolated.
+
+---
+
+## Appendix — Dumping prompts for this archive
+
+To print the **exact** multi-line messages the game sends (e.g. to paste under Part II), use `render_for_log` from `src/llm/prompts`:
+
+```bash
+cd "path/to/GADS7331POE"
+python -c "import json; from pathlib import Path; from src.llm.prompts import build_chat_messages, render_for_log; p=json.loads(Path('data/personas/broke_bard.json').read_text(encoding='utf-8')); ws={'gold':10,'reputation':{'townsfolk':0},'gossip_heard':[],'_quest_map_block':''}; print(render_for_log(build_chat_messages(p, ws, [], 'Evening.')))"
+```
+
+Swap `build_chat_messages` for `build_haggle_messages`, `build_quest_messages`, etc., with the appropriate arguments (see call sites in `src/main.py`).
