@@ -68,6 +68,7 @@ Requests are listed in **chronological order** (oldest first). Duplicate “plea
 | 2026-05-12 | Fix **`NameError: MainMenu`** / imports | Import and wiring fix | `src/main.py` | git `b3e154a` |
 | 2026-05-12 | **Resizable window**; snap to top **maximizes** and reflows UI | `pygame.RESIZABLE`, `VIDEORESIZE`, `_apply_window_dimensions` | `src/main.py`, `src/game/main_menu.py` | git `ea6e307`; transcript summary `(reconstructed)` |
 | 2026-05-12 | **Sale gold** must match **`agreed_price`** / NPC handshake, not only UI ask | `sale_gold` in `parse_haggle`; gossip + item use it | `parsers.py`, `prompts.py`, `main.py` | user request |
+| 2026-05-12 | **Haggle settle loop:** last counter in history, prompt handshake rule, code auto-accept when ask matches | `npc_counter` rows, `last_npc_counter`, `_haggle_worker` short-circuit, clear history on deal/walk | `npc.py`, `prompts.py`, `main.py` | user request |
 
 | 2026-05-12 | **Haggle variety:** some NPCs pay high prices, others push hard | `haggle_behavior` + wider `haggle_floor_pct` + `HAGGLE_RULES` update | `src/llm/prompts.py`, `data/personas/*.json`, docs | user request |
 
@@ -190,6 +191,12 @@ Schema in the system prompt matches `HAGGLE_RULES` in code (accept, counter_offe
 **Change:** On accept, the model may set **`agreed_price`** to the gold the customer actually pays (e.g. below the keeper's current ask). **`parse_haggle`** fills **`sale_gold`** (clamped to purse); `_on_haggle_result` and gossip sell credit **`sale_gold`**, not the modal/list ask alone.
 
 **Verdict:** **good**. Player receipts match the handshake; gossip flows reuse the same parser.
+
+### B8 — Settled price / handshake (structured `npc_counter` + code path)
+
+**Change:** Haggle rows persist **`npc_counter`** from **`counter_offer`**; the negotiation block spells out “you countered N gold”. **`HAGGLE_RULES`** adds a **handshake** rule (accept when the keeper matches your last counter unless you walk). **`last_npc_counter`** + **`_haggle_worker`** auto-accept without calling the model when the listed ask equals that counter and fits the purse; **`haggle_history`** clears after accept or walk-away.
+
+**Verdict:** **good**. Small models can no longer spin on the same figure once the keeper has matched it.
 
 ---
 

@@ -154,6 +154,10 @@ Rules:
 - If you accept, set counter_offer to null, walk_away to false, and set
   agreed_price to the exact gold you pay (or null only if you pay the keeper's
   current ask with no change).
+- **Handshake:** If the negotiation history shows *you* countered with a
+  specific gold amount and the keeper's *current* offer equals that amount,
+  you MUST accept (accept: true) at that price unless you walk_away. Do not
+  counter again at the same price you already named.
 - Stay in character in the line; reflect the persona's voice.
 """
 
@@ -167,8 +171,8 @@ def build_haggle_messages(
 ) -> list[dict[str, str]]:
     """Build the JSON-mode haggle message list.
 
-    ``haggle_history`` is the running list of {price, response} from prior
-    rounds in the same negotiation, so the model sees its earlier stance.
+    ``haggle_history`` is the running list of prior rounds (price, line,
+    optional npc_counter for your last counter-offer gold).
     """
     fair_price = max(1, int(item["base_price"] * persona["haggle_floor_pct"]))
     haggle_behavior = (
@@ -176,10 +180,17 @@ def build_haggle_messages(
     )
     history_lines = []
     for round_ in haggle_history[-3:]:
-        history_lines.append(
-            f"  - Player offered {round_['price']} gold; "
-            f"you replied: {round_.get('line', '...')}"
-        )
+        nc = round_.get("npc_counter")
+        line = round_.get("line", "...")
+        if nc is not None:
+            history_lines.append(
+                f"  - Player offered {round_['price']} gold; you countered {nc} gold — "
+                f"\"{line}\""
+            )
+        else:
+            history_lines.append(
+                f"  - Player offered {round_['price']} gold; you replied: {line}"
+            )
     history_block = "\n".join(history_lines) if history_lines else "  - (first round)"
 
     system = (

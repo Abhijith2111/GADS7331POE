@@ -32,6 +32,7 @@ from src.game.market import MARKET_OFFERS
 from src.game.npc import (
     NPC,
     CustomerQueue,
+    last_npc_counter,
     load_persona_by_id,
     load_personas,
     personas_mentioned_in_text,
@@ -1336,6 +1337,29 @@ class Game:
         npc = self.current_npc
         floor = max(1, int(item["base_price"] * npc.persona["haggle_floor_pct"]))
         budget = int(npc.persona["budget_gold"])
+        handshake = last_npc_counter(npc.haggle_history)
+        if (
+            handshake is not None
+            and offered_price == handshake
+            and 1 <= offered_price <= budget
+        ):
+            dec = HaggleDecision(
+                accept=True,
+                counter_offer=None,
+                line="That matches what I asked — done.",
+                walk_away=False,
+                agreed_price=None,
+                sale_gold=offered_price,
+            )
+            self.event_q.put(
+                HaggleResultEvent(
+                    decision=dec,
+                    item_id=item["id"],
+                    offered_price=offered_price,
+                    ok=True,
+                )
+            )
+            return
         messages = P.build_haggle_messages(
             npc.persona,
             self.world.to_prompt_dict(),
@@ -1530,9 +1554,14 @@ class Game:
         item_name = item["name"] if item else ev.item_id
 
         self.dialogue.add(self.current_npc.name, decision.line)
-        self.current_npc.haggle_history.append(
-            {"price": ev.offered_price, "line": decision.line, "accepted": decision.accept}
-        )
+        row: dict[str, Any] = {
+            "price": ev.offered_price,
+            "line": decision.line,
+            "accepted": decision.accept,
+        }
+        if decision.counter_offer is not None:
+            row["npc_counter"] = decision.counter_offer
+        self.current_npc.haggle_history.append(row)
 
         if decision.accept:
             self.world.add_gold(decision.sale_gold)
@@ -1542,10 +1571,12 @@ class Game:
             self.toasts.push(
                 f"Sold {item_name} for {decision.sale_gold}g. (+1 townsfolk)", GOOD
             )
+            self.current_npc.haggle_history.clear()
         elif decision.walk_away:
             self.toasts.push(
                 f"{self.current_npc.name} walks away from the deal.", WARN
             )
+            self.current_npc.haggle_history.clear()
         elif decision.counter_offer is not None:
             self.toasts.push(
                 f"Counter-offer: {decision.counter_offer}g. Use Sell item... to reply.",

@@ -76,6 +76,15 @@ class NPC:
         self.haggle_history.clear()
 
 
+def last_npc_counter(haggle_history: list[dict[str, Any]]) -> int | None:
+    """Latest customer counter-offer gold from negotiation rows (most recent wins)."""
+    for row in reversed(haggle_history):
+        c = row.get("npc_counter")
+        if c is not None:
+            return int(c)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Persona loading
 # ---------------------------------------------------------------------------

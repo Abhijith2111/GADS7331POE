@@ -5,6 +5,18 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-05-12 — Haggle: stop “settled price” loops (history counter + handshake)
+
+**Tag:** `feature`, `prompt`, `economy`
+**Source:** user request — when the keeper’s ask matches the customer’s last counter, the deal should close reliably without the LLM re-refusing. AI-assisted (Cursor).
+
+- Each haggle history row stores optional **`npc_counter`** when the model returns a **`counter_offer`**; `build_haggle_messages` renders it explicitly (“you countered X gold”).
+- **`HAGGLE_RULES`**: handshake bullet — if the keeper’s current offer equals your last counter, you must **accept** (or **walk_away**), not counter the same price again.
+- **`last_npc_counter`** in `src/game/npc.py`; **`_haggle_worker`** short-circuits to a synthetic accept (no Ollama) when **`offered_price`** equals that counter and is within **[1, budget]**.
+- **`haggle_history`** is cleared after a completed sale or a **walk_away** so the next sell does not reuse stale rounds.
+
+---
+
 ## 2026-05-12 — Haggle accept: gold matches AI `agreed_price`, not only listed ask
 
 **Tag:** `feature`, `parsing`, `economy`
