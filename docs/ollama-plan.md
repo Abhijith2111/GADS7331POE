@@ -173,7 +173,10 @@ Output schema (Pydantic-validated):
 
 Counter-offers are clamped into `[haggle_floor_pct * base_price,
 budget_gold]`. Acceptances above the persona's budget are demoted to
-"can't afford" — see `parse_haggle` in `src/llm/parsers.py`.
+"can't afford" — see `parse_haggle` in `src/llm/parsers.py`. Personas
+also carry **haggling temperament** text (`haggle_behavior` in JSON)
+injected into the haggle prompt so some customers lean toward paying
+near list price and others counter hard, within the same schema.
 
 ### 4.3 Quest prompt (JSON-mode)
 

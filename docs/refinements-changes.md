@@ -5,6 +5,18 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-05-12 — Haggle variety: temperament + wider price anchors
+
+**Tag:** `feature`, `prompt`
+**Source:** user request — some customers should accept high keeper prices while others haggle hard. AI-assisted (Cursor).
+
+- Each persona JSON may include **`haggle_behavior`**: short prose describing how eagerly they pay vs counter. `build_haggle_messages` injects it as **Haggling temperament:** under the persona block.
+- **`HAGGLE_RULES`** updated: fair price is a *guide*; generous/rushed characters may accept at or slightly above that anchor (never above purse); stingy ones push below or walk. Removed the old rigid “accept iff ≤ fair” line that made everyone feel the same.
+- **`haggle_floor_pct`** retuned per character so numeric anchors differ (broke bard low ~0.52, smug noble high ~0.98, others in between).
+- Docs: `docs/high-concept.md`, `docs/ollama-plan.md`, `docs/prompts-used.md` (Part I + B6).
+
+---
+
 ## 2026-05-12 — Game title rebranded: **The Tavern Master**
 
 **Tag:** `scope`, `branding`, `prompt`

@@ -28,9 +28,10 @@ small-talk — except the small talk genuinely is fresh every play.
    world-state JSON.
 3. **Haggling that actually changes prices.** When the player offers a
    price, the LLM responds in JSON: `{accept, counter_offer, line,
-   walk_away}`. Counter-offers loop. The persona's `budget_gold` and
-   `haggle_floor_pct` are enforced with hard clamps so the model can
-   colour the negotiation but cannot break the economy.
+   walk_away}`. Counter-offers loop. Each persona defines
+   `haggle_floor_pct` (anchor for a "fair" deal) and optional
+   `haggle_behavior` (e.g. pays list vs squeezes every coin); `budget_gold`
+   and clamps in code still cap what they can agree to.
 4. **Gossip that travels.** Lines that read like rumours are extracted
    from the model's replies and re-injected into later customers'
    prompts as "what's already going round town", so the world remembers.

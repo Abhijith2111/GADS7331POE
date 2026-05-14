@@ -27,6 +27,12 @@ from src.game.world_map_data import render_locations_for_prompt
 # voice stays stable.
 CHAT_MEMORY_TURNS = 6
 
+# Shown only in the haggle prompt so the model varies accept/counter by persona.
+_DEFAULT_HAGGLE_BEHAVIOR = (
+    "Balanced: you want a reasonable discount but won't waste the evening "
+    "over a few gold."
+)
+
 
 # ---------------------------------------------------------------------------
 # Shared building blocks
@@ -122,8 +128,8 @@ def build_chat_messages(
 # ---------------------------------------------------------------------------
 HAGGLE_RULES = """You are deciding whether the customer accepts the
 shopkeeper's price for ONE item. You have a maximum coin purse and a
-private willingness-to-pay floor. Reply with ONLY a JSON object matching
-this schema, no prose, no markdown fences:
+private willingness-to-pay anchor (your "fair price"). Reply with ONLY a
+JSON object matching this schema, no prose, no markdown fences:
 
 {
   "accept": boolean,           // true = deal, false = haggle continues or walks
@@ -136,8 +142,13 @@ Rules:
 - Never accept above your coin purse.
 - Never counter-offer above your coin purse.
 - Counter-offers must be a whole number of gold, >= 1.
-- If the offered price is at or below your fair price, accept.
-- If accepted, set counter_offer to null and walk_away to false.
+- Follow **your haggling temperament** (in the Persona block): generous or
+  rushed customers may accept at or even slightly above the listed fair price
+  to save time, pride, or hassle; tight-fisted ones push below it, counter
+  hard, or walk away over small sums.
+- Use your fair price as a guide: it is the usual ceiling for a "good deal"
+  for *you*, but temperament can bend it (never above purse).
+- If you accept, set counter_offer to null and walk_away to false.
 - Stay in character in the line; reflect the persona's voice.
 """
 
@@ -155,6 +166,9 @@ def build_haggle_messages(
     rounds in the same negotiation, so the model sees its earlier stance.
     """
     fair_price = max(1, int(item["base_price"] * persona["haggle_floor_pct"]))
+    haggle_behavior = (
+        str(persona.get("haggle_behavior") or "").strip() or _DEFAULT_HAGGLE_BEHAVIOR
+    )
     history_lines = []
     for round_ in haggle_history[-3:]:
         history_lines.append(
@@ -165,7 +179,8 @@ def build_haggle_messages(
 
     system = (
         f"{HAGGLE_RULES}\n"
-        f"--- Persona ---\n{_persona_card(persona)}\n\n"
+        f"--- Persona ---\n{_persona_card(persona)}\n"
+        f"Haggling temperament: {haggle_behavior}\n\n"
         f"--- World state ---\n{_world_state_block(world_state)}\n\n"
         f"--- Item under negotiation ---\n"
         f"{item['id']} ({item['name']}): base shop price {item['base_price']} gold.\n"

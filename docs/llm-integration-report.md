@@ -61,7 +61,9 @@ Putting the LLM behind real gameplay decisions — not just flavour —
 changed the project meaningfully. Haggling carries weight because the
 customer's voice and their accept/refuse are produced by the same
 call: an irritable dwarf actually refuses an obvious lowball offer in a
-voice you can read. Gossip persistence, where a line from one customer
+voice you can read. Persona fields **`haggle_floor_pct`** and
+**`haggle_behavior`** steer who pays near list price versus who squeezes
+the keeper on every item. Gossip persistence, where a line from one customer
 re-enters later customers' prompts, makes the bar feel like a single
 shared world rather than a stage that resets. The five hand-authored
 personas plus the JSON world-state are still the load-bearing wall;

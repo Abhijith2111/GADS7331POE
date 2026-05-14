@@ -67,7 +67,7 @@ Requests are listed in **chronological order** (oldest first). Duplicate “plea
 | 2026-05-12 | **Default 1920×1080**, **Full HD** first preset; layout **above taskbar** (`bottom_reserve`) | Main menu order, pause sync | `src/main.py`, `src/game/main_menu.py`, `src/game/pause_menu.py` | git `09f6856`; `(reconstructed)` ask text |
 | 2026-05-12 | Fix **`NameError: MainMenu`** / imports | Import and wiring fix | `src/main.py` | git `b3e154a` |
 | 2026-05-12 | **Resizable window**; snap to top **maximizes** and reflows UI | `pygame.RESIZABLE`, `VIDEORESIZE`, `_apply_window_dimensions` | `src/main.py`, `src/game/main_menu.py` | git `ea6e307`; transcript summary `(reconstructed)` |
-| 2026-05-12 | **Rename game** to **The Tavern Master** (window, LLM tavern name, UI strings, docs, shortcuts) | Shipped | `src/main.py`, `src/llm/prompts.py`, `src/game/world_map.py`, `docs/*`, batch files | user request |
+| 2026-05-12 | **Haggle variety:** some NPCs pay high prices, others push hard | `haggle_behavior` + wider `haggle_floor_pct` + `HAGGLE_RULES` update | `src/llm/prompts.py`, `data/personas/*.json`, docs | user request |
 
 > **Detail:** Many rows above are expanded in [refinements-changes.md](refinements-changes.md) with tags and rationale. Use that file for deep dives; Part I stays scannable.
 
@@ -162,20 +162,26 @@ Capped at 6 turns (`CHAT_MEMORY_TURNS=6`).
 
 ### B3 — `format: "json"` plus explicit schema (current `HAGGLE_RULES`)
 
-Schema in the system prompt matches `HAGGLE_RULES` in code (accept, counter_offer, line, walk_away; rules for purse and fair price).
+Schema in the system prompt matches `HAGGLE_RULES` in code (accept, counter_offer, line, walk_away). Rules tie **fair price** to purse limits and allow **haggling temperament** (per persona) to bend how readily someone accepts a “high” keeper price vs counters.
 
 **Example reply:**
 > `{"accept": false, "counter_offer": 4, "line": "Four. Final.", "walk_away": false}`
 
 **Verdict:** **excellent**. ~98% clean-parse; remainder saved by `extract_json_object`.
 
-### B4 — Explicit "fair price" and "absolute maximum" lines
+### B4 — Explicit "fair price" and absolute maximum (coin purse)
 
 **Verdict:** **good**. Clamps in `parse_haggle` still enforce invariants.
 
 ### B5 — Negotiation history block
 
 **Verdict:** **good**. Model maintains stance across rounds.
+
+### B6 — Per-persona haggling temperament (`haggle_behavior` + wider `haggle_floor_pct`)
+
+**Change:** Persona JSON gained optional `haggle_behavior` (short prose). `build_haggle_messages` injects `Haggling temperament: …` under the persona card. `HAGGLE_RULES` now tells the model that generous or rushed customers may accept at or modestly above the listed fair price, while tight-fisted ones push lower—still never above purse. Numeric **`haggle_floor_pct`** was spread wider per character (e.g. broke bard ~0.52, noble ~0.98) so the anchor itself differs.
+
+**Verdict:** **good**. Same JSON pipeline; visibly different shopkeeper outcomes by who is at the bar.
 
 ---
 
