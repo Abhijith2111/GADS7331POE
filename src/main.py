@@ -27,6 +27,8 @@ from typing import Any
 import pygame
 
 from src.game.assets import MusicPlayer, SoundLibrary, load_font
+from src.game.main_menu import MainMenu
+from src.game.market import MARKET_OFFERS
 from src.game.npc import (
     NPC,
     CustomerQueue,
@@ -50,7 +52,7 @@ from src.game.ui import (
     TransparencyBanner,
     wrap_text,
 )
-from src.game.main_menu import MainMenu
+from src.game.pause_menu import PauseMenu
 from src.game.world_map import LocationScene, WorldMapScene
 from src.game.world_map_data import WHOLESALE_MARKET_ID, get_hotspot, get_location
 from src.game.world_state import WorldState
@@ -239,8 +241,22 @@ class Game:
         # and warmup are all done. Mostly informational.
         self._ollama_ready: bool = False
 
-        # UI layout.
-        self._init_ui()
+        self.paused: bool = False
+        self._pause_menu = PauseMenu()
+
+        # UI layout (rebuilt on window resize).
+        self._build_ui_layout()
+        self.help_visible = False
+
+        # Sell flow state (active while the sell modal is open).
+        self._sell_item: dict[str, Any] | None = None
+        self._sell_offer: int = 0
+
+        # Gossip-sell flow state (active while the gossip price modal is up).
+        self._gossip_sell_text: str | None = None
+        self._gossip_sell_offer: int = 5
+        self._gossip_sell_kind: str = "about_self"
+        self._gossip_subject_label: str = ""
 
         # Pending haggle context (set when a haggle is in flight).
         self._pending_haggle_item: dict[str, Any] | None = None
@@ -263,7 +279,8 @@ class Game:
         with open(ITEMS_PATH, "r", encoding="utf-8") as fh:
             return list(json.load(fh)["items"])
 
-    def _init_ui(self) -> None:
+    def _build_ui_layout(self) -> None:
+        """Position all UI widgets for ``self.screen_size``. Safe to call after resize."""
         sw, sh = self.screen_size
         margin = 20
         dialogue_h = 240
@@ -290,10 +307,6 @@ class Game:
             submit_cb=self._on_player_submit,
         )
 
-        # Action column: full height from below the status band to the
-        # bottom margin, so every mode's buttons fit without clipping.
-        # (Previously the panel only matched the dialogue stack + input,
-        # which was too short once we added journals/explore buttons.)
         scene_top = margin + 26 + status_h + 8
         action_x = margin + chat_w + side_gap
         action_y = scene_top
@@ -301,32 +314,14 @@ class Game:
         self.actions = ActionPanel(
             pygame.Rect(action_x, action_y, side_panel_w, action_h)
         )
-        # Buttons are configured dynamically per mode by
-        # ``_refresh_action_buttons`` so we don't seed any here.
 
-        self.toasts = ToastStack(
-            anchor=(action_x, action_y + 6)
-        )
+        self.toasts = ToastStack(anchor=(action_x, action_y + 6))
         self.banner = TransparencyBanner(sw)
         self.modal = ModalPanel(self.screen_size, (720, 520))
-        self.help_visible = False
 
-        # Sell flow state (active while the sell modal is open).
-        self._sell_item: dict[str, Any] | None = None
-        self._sell_offer: int = 0
-
-        # Gossip-sell flow state (active while the gossip price modal is up).
-        self._gossip_sell_text: str | None = None
-        self._gossip_sell_offer: int = 5
-        self._gossip_sell_kind: str = "about_self"
-        self._gossip_subject_label: str = ""
-
-        # Pin the NPC + name plate just above the dialogue box.
+        self.scene.set_screen_size(self.screen_size)
         self.scene.set_floor_y(self.dialogue.rect.top - 8)
 
-        # World-map and location scenes share the same canvas the tavern
-        # scene uses (full screen minus banner). They are built once and
-        # re-shown when the mode changes.
         canvas_rect = pygame.Rect(
             margin,
             margin + 26 + status_h + 8,
@@ -335,6 +330,27 @@ class Game:
         )
         self.world_map_scene = WorldMapScene(canvas_rect)
         self.location_scene = LocationScene(canvas_rect)
+
+    def _relayout_after_resize(self, w: int, h: int) -> None:
+        """Apply a new window size and rebuild layout; closes modal / sell flows."""
+        self.screen_size = (w, h)
+        self.screen = pygame.display.set_mode(self.screen_size)
+        self._build_ui_layout()
+        self._pending_haggle_item = None
+        self._pending_haggle_offer = None
+        self._sell_item = None
+        self._sell_offer = 0
+        self._gossip_sell_text = None
+        self._gossip_sell_offer = 5
+        self._gossip_sell_kind = "about_self"
+        self._gossip_subject_label = ""
+        self._refresh_action_buttons()
+        self._pause_menu.layout(w, h)
+        self._pause_menu.sync_selection_to_current(w, h)
+        self.toasts.push(
+            "Display size updated. Any open shop dialogs were closed.",
+            GOOD,
+        )
 
     # ------------------------------------------------------------------
     # Health check + first persona
@@ -472,7 +488,8 @@ class Game:
             "    a quest to find the item. Wrong clicks just\n"
             "    print 'Nothing useful here.' and cost you nothing.\n"
             "  - Hot-keys: F1 help, F2 settings, F5 next customer, T toggles\n"
-            "    the AI banner, M mutes/unmutes background music, Esc quits.\n"
+            "    the AI banner, M mutes/unmutes background music, Esc opens the\n"
+            "    pause menu (change aspect ratio or quit from there).\n"
             "  - Power users can still type slash commands like\n"
             "    /sell strong_stout 5 directly into the input bar.",
         )
@@ -1882,12 +1899,28 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-                elif event.type == pygame.KEYDOWN:
+                    continue
+                if self.paused:
+                    act = self._pause_menu.handle_event(event)
+                    if act == "resume":
+                        self.paused = False
+                    elif act == "quit":
+                        running = False
+                    elif act == "apply":
+                        nw, nh = self._pause_menu.selected_size()
+                        if (nw, nh) != self.screen_size:
+                            self._relayout_after_resize(nw, nh)
+                        else:
+                            self.toasts.push("Already using this size.", HIGHLIGHT)
+                    continue
+                if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         if self.modal.visible:
                             self.modal.hide()
                         else:
-                            running = False
+                            self.paused = True
+                            self._pause_menu.layout(*self.screen_size)
+                            self._pause_menu.sync_selection_to_current(*self.screen_size)
                     elif event.key == pygame.K_F1:
                         self._show_help()
                     elif event.key == pygame.K_F2:
@@ -1938,7 +1971,8 @@ class Game:
             self._drain_events()
             # Auto-return to the tavern after a celebrated quest completion.
             if (
-                self._return_to_tavern_at is not None
+                not self.paused
+                and self._return_to_tavern_at is not None
                 and time.monotonic() >= self._return_to_tavern_at
             ):
                 self._return_to_tavern_at = None
@@ -1947,10 +1981,11 @@ class Game:
             # clearly unavailable while the LLM is busy.
             self.actions.set_enabled_all(not self.streaming)
 
-            if self.demo_mode:
+            if not self.paused and self.demo_mode:
                 self._drive_demo()
 
-            self.text_input.update(dt)
+            if not self.paused:
+                self.text_input.update(dt)
 
             self.screen.fill((0, 0, 0))
             if self.mode == MODE_TAVERN:
@@ -1973,6 +2008,8 @@ class Game:
             self.toasts.draw(self.screen)
             self.modal.draw(self.screen)
             self._draw_corner_help()
+            if self.paused:
+                self._pause_menu.draw(self.screen)
             pygame.display.flip()
 
         self.world.save()
@@ -1982,7 +2019,7 @@ class Game:
 
     def _draw_corner_help(self) -> None:
         font = load_font(14)
-        text = "F1 help   F2 settings   F5 next customer   T banner   Esc quit"
+        text = "F1 help   F2 settings   F5 next customer   T banner   Esc pause"
         surf = font.render(text, True, (180, 140, 70))
         self.screen.blit(surf, (20, self.screen_size[1] - 18))
 

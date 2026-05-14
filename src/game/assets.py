@@ -26,6 +26,8 @@ SPRITE_DIR = Path("assets") / "sprites"
 FONT_DIR = Path("assets") / "fonts"
 SFX_DIR = Path("assets") / "sfx"
 MUSIC_DIR = Path("assets") / "music"
+# Optional project-root folder for user-supplied BGM (not necessarily in git).
+USER_MUSIC_DIR = Path("Music")
 
 NPC_SIZE = (220, 320)
 
@@ -132,10 +134,11 @@ class MusicPlayer:
     """Loop a calm background ambience using ``pygame.mixer.music``.
 
     Resolution order on construction:
-    1. Any file in ``assets/music/`` with extension ``.ogg``, ``.wav``,
-       or ``.mp3`` (alphabetical first wins) — lets the player drop in
-       a real track without changing code.
-    2. A procedurally generated 16-second warm-pad loop, written to a
+    1. Any file in the project-root ``Music/`` folder (``.ogg``, ``.wav``,
+       or ``.mp3``; alphabetical first) — easy drop-in for your own tracks.
+    2. Any file in ``assets/music/`` with the same extensions (alphabetical
+       first) — optional bundled or secondary override.
+    3. A procedurally generated 16-second warm-pad loop, written to a
        temp WAV so the mixer can stream it.
 
     The mixer's ``music`` channel is a single global resource; we own
@@ -184,14 +187,21 @@ class MusicPlayer:
             self.enabled = False
 
     def _resolve_track(self) -> Path | None:
-        # 1. Honour any track the user dropped into assets/music/.
+        # 1. Project-root Music/ (user drop-in).
+        if USER_MUSIC_DIR.is_dir():
+            for ext in (".ogg", ".wav", ".mp3"):
+                hits = sorted(USER_MUSIC_DIR.glob(f"*{ext}"))
+                if hits:
+                    self._track_path = hits[0]
+                    return hits[0]
+        # 2. assets/music/
         if MUSIC_DIR.is_dir():
             for ext in (".ogg", ".wav", ".mp3"):
                 hits = sorted(MUSIC_DIR.glob(f"*{ext}"))
                 if hits:
                     self._track_path = hits[0]
                     return hits[0]
-        # 2. Generate the procedural pad into a temp WAV.
+        # 3. Generate the procedural pad into a temp WAV.
         try:
             data = _generate_ambient_wav()
         except Exception:

@@ -313,6 +313,7 @@ class ModalPanel:
     def __init__(self, screen_size: tuple[int, int], size: tuple[int, int]) -> None:
         sw, sh = screen_size
         w, h = size
+        self._panel_w, self._panel_h = w, h
         self.rect = pygame.Rect((sw - w) // 2, (sh - h) // 2, w, h)
         self.title_font = load_font(28, bold=True)
         self.body_font = load_font(20)
@@ -321,6 +322,12 @@ class ModalPanel:
         self.body_lines: list[str] = []
         self.buttons: list[Button] = []
         self.visible = False
+
+    def reposition(self, screen_size: tuple[int, int]) -> None:
+        """Recentre the panel after a window resize (button rects stay valid)."""
+        sw, sh = screen_size
+        w, h = self._panel_w, self._panel_h
+        self.rect = pygame.Rect((sw - w) // 2, (sh - h) // 2, w, h)
 
     def show(self, title: str, body: str, buttons: list[Button]) -> None:
         self.title = title

@@ -40,6 +40,11 @@ class TavernScene:
         """Pin the bottom of the NPC name plate to ``y`` (screen pixels)."""
         self._floor_y = y
 
+    def set_screen_size(self, size: tuple[int, int]) -> None:
+        """Rebuild the tavern backdrop for a new window size."""
+        self.screen_size = size
+        self.background = render_tavern_background(size)
+
     def draw(self, surface: pygame.Surface) -> None:
         surface.blit(self.background, (0, 0))
         if not (self._npc_surface and self._npc_persona):
