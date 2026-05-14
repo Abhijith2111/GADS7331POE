@@ -65,6 +65,16 @@ class TestParseHaggle:
         d = parse_haggle(raw, **self._ctx())
         assert d.accept is True
         assert d.counter_offer is None
+        assert d.sale_gold == 10
+
+    def test_accept_uses_agreed_price_below_ask(self) -> None:
+        raw = (
+            '{"accept": true, "counter_offer": null, "line": "Seven.", '
+            '"walk_away": false, "agreed_price": 7}'
+        )
+        d = parse_haggle(raw, **self._ctx(offered_price=10, persona_budget=12))
+        assert d.accept is True
+        assert d.sale_gold == 7
 
     def test_overpriced_acceptance_is_demoted(self) -> None:
         # Model accepts 100g but persona only has 12g — gameplay would soft-lock.
@@ -72,6 +82,16 @@ class TestParseHaggle:
         d = parse_haggle(raw, **self._ctx(offered_price=100))
         assert d.accept is False
         assert d.counter_offer == 12  # clamped to budget
+        assert d.sale_gold == 0
+
+    def test_overpriced_with_agreed_within_budget_pays_agreed(self) -> None:
+        raw = (
+            '{"accept": true, "counter_offer": null, "line": "Eight is all I have.", '
+            '"walk_away": false, "agreed_price": 8}'
+        )
+        d = parse_haggle(raw, **self._ctx(offered_price=100, persona_budget=12))
+        assert d.accept is True
+        assert d.sale_gold == 8
 
     def test_counter_offer_clamped_to_floor(self) -> None:
         # Model proposes a counter below the persona's haggle floor.
@@ -270,6 +290,7 @@ class TestCallWithRetry:
         assert ok is True
         assert isinstance(result, HaggleDecision)
         assert result.accept is True
+        assert result.sale_gold == 5
 
     def test_retry_then_succeed(self) -> None:
         attempts = {"n": 0}

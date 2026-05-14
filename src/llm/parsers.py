@@ -19,7 +19,7 @@ import json
 import re
 from typing import Any, Callable
 
-from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from src.game.world_map_data import (
     DEFAULT_HOTSPOT_ID,
@@ -33,12 +33,25 @@ from src.game.world_map_data import (
 # Models
 # ---------------------------------------------------------------------------
 class HaggleDecision(BaseModel):
-    """The shape returned by the haggle JSON-mode prompt."""
+    """The shape returned by the haggle JSON-mode prompt.
+
+    ``sale_gold`` is filled by ``parse_haggle`` when ``accept``; it is the
+    amount the player receives and never exceeds the customer's budget.
+    """
+
+    model_config = ConfigDict(extra="ignore")
 
     accept: bool
     counter_offer: int | None = None
     line: str = Field(min_length=1, max_length=400)
     walk_away: bool = False
+    agreed_price: int | None = Field(
+        default=None,
+        ge=1,
+        description="When accept is true: gold the customer pays this round "
+        "(may be below the listed ask). Omit to use the keeper's current ask.",
+    )
+    sale_gold: int = Field(default=0, ge=0)
 
     @field_validator("counter_offer")
     @classmethod
@@ -48,6 +61,12 @@ class HaggleDecision(BaseModel):
         if v < 1:
             return 1
         return v
+
+    @model_validator(mode="after")
+    def _drop_agreed_when_not_accepting(self) -> "HaggleDecision":
+        if not self.accept and self.agreed_price is not None:
+            return self.model_copy(update={"agreed_price": None})
+        return self
 
 
 class FoundLine(BaseModel):
@@ -149,6 +168,13 @@ def parse_haggle(
     Out-of-range counter-offers are clamped into ``[persona_floor,
     persona_budget]`` rather than rejected outright; this keeps gameplay
     flowing when the model picks a number a coin or two off.
+
+    When ``accept`` is true, ``sale_gold`` is how much gold the player
+    receives: the model may set ``agreed_price`` below the keeper's
+    current ask; otherwise ``sale_gold`` equals ``offered_price`` (capped
+    by the customer's purse). If the ask exceeds the purse and the model
+    did not name a lower ``agreed_price``, acceptance is demoted to a
+    counter at ``persona_budget``.
     """
     data = extract_json_object(raw)
     decision = HaggleDecision.model_validate(data)
@@ -156,9 +182,13 @@ def parse_haggle(
         clamped = max(persona_floor, min(persona_budget, decision.counter_offer))
         if clamped != decision.counter_offer:
             decision = decision.model_copy(update={"counter_offer": clamped})
-    if decision.accept and offered_price > persona_budget:
-        # Model accepted a price the persona literally cannot afford.
-        decision = decision.model_copy(
+
+    if not decision.accept:
+        return decision.model_copy(update={"sale_gold": 0})
+
+    agreed = decision.agreed_price
+    if offered_price > persona_budget and agreed is None:
+        return decision.model_copy(
             update={
                 "accept": False,
                 "counter_offer": persona_budget,
@@ -166,9 +196,13 @@ def parse_haggle(
                     f"{decision.line} ...but I have only {persona_budget} gold "
                     "to my name."
                 ),
+                "sale_gold": 0,
             }
         )
-    return decision
+
+    base = agreed if agreed is not None else offered_price
+    sale = max(1, min(int(base), persona_budget))
+    return decision.model_copy(update={"sale_gold": sale})
 
 
 # ---------------------------------------------------------------------------
@@ -227,6 +261,7 @@ DEGRADED_HAGGLE = HaggleDecision(
     counter_offer=None,
     line="I... need a moment to think on it.",
     walk_away=False,
+    sale_gold=0,
 )
 
 DEGRADED_QUEST = Quest(

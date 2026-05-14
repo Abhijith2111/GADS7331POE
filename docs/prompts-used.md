@@ -67,6 +67,8 @@ Requests are listed in **chronological order** (oldest first). Duplicate “plea
 | 2026-05-12 | **Default 1920×1080**, **Full HD** first preset; layout **above taskbar** (`bottom_reserve`) | Main menu order, pause sync | `src/main.py`, `src/game/main_menu.py`, `src/game/pause_menu.py` | git `09f6856`; `(reconstructed)` ask text |
 | 2026-05-12 | Fix **`NameError: MainMenu`** / imports | Import and wiring fix | `src/main.py` | git `b3e154a` |
 | 2026-05-12 | **Resizable window**; snap to top **maximizes** and reflows UI | `pygame.RESIZABLE`, `VIDEORESIZE`, `_apply_window_dimensions` | `src/main.py`, `src/game/main_menu.py` | git `ea6e307`; transcript summary `(reconstructed)` |
+| 2026-05-12 | **Sale gold** must match **`agreed_price`** / NPC handshake, not only UI ask | `sale_gold` in `parse_haggle`; gossip + item use it | `parsers.py`, `prompts.py`, `main.py` | user request |
+
 | 2026-05-12 | **Haggle variety:** some NPCs pay high prices, others push hard | `haggle_behavior` + wider `haggle_floor_pct` + `HAGGLE_RULES` update | `src/llm/prompts.py`, `data/personas/*.json`, docs | user request |
 
 > **Detail:** Many rows above are expanded in [refinements-changes.md](refinements-changes.md) with tags and rationale. Use that file for deep dives; Part I stays scannable.
@@ -182,6 +184,12 @@ Schema in the system prompt matches `HAGGLE_RULES` in code (accept, counter_offe
 **Change:** Persona JSON gained optional `haggle_behavior` (short prose). `build_haggle_messages` injects `Haggling temperament: …` under the persona card. `HAGGLE_RULES` now tells the model that generous or rushed customers may accept at or modestly above the listed fair price, while tight-fisted ones push lower—still never above purse. Numeric **`haggle_floor_pct`** was spread wider per character (e.g. broke bard ~0.52, noble ~0.98) so the anchor itself differs.
 
 **Verdict:** **good**. Same JSON pipeline; visibly different shopkeeper outcomes by who is at the bar.
+
+### B7 — `agreed_price` + `sale_gold` (payout = what the NPC pays)
+
+**Change:** On accept, the model may set **`agreed_price`** to the gold the customer actually pays (e.g. below the keeper's current ask). **`parse_haggle`** fills **`sale_gold`** (clamped to purse); `_on_haggle_result` and gossip sell credit **`sale_gold`**, not the modal/list ask alone.
+
+**Verdict:** **good**. Player receipts match the handshake; gossip flows reuse the same parser.
 
 ---
 

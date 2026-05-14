@@ -5,6 +5,18 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-05-12 — Haggle accept: gold matches AI `agreed_price`, not only listed ask
+
+**Tag:** `feature`, `parsing`, `economy`
+**Source:** user request — on sale, the player should receive only what the customer agreed to pay. AI-assisted (Cursor).
+
+- Extended ``HaggleDecision`` with optional JSON ``agreed_price`` and parser-filled ``sale_gold``.
+- ``parse_haggle`` sets ``sale_gold`` from ``agreed_price`` when present (clamped to purse), else from the keeper's current ask; if the ask exceeds purse and the model gives no lower agreed price, accept is still demoted to a budget counter.
+- Item sales and gossip sells credit ``decision.sale_gold`` instead of ``ev.offered_price``.
+- Prompts (item haggle + gossip buy/intel) document the new field.
+
+---
+
 ## 2026-05-12 — Haggle variety: temperament + wider price anchors
 
 **Tag:** `feature`, `prompt`

@@ -135,7 +135,10 @@ JSON object matching this schema, no prose, no markdown fences:
   "accept": boolean,           // true = deal, false = haggle continues or walks
   "counter_offer": integer|null, // gold counter-offer if you want to keep haggling
   "line": string,              // a short in-character reply (max 25 words)
-  "walk_away": boolean         // true if you give up on this item
+  "walk_away": boolean,        // true if you give up on this item
+  "agreed_price": integer|null // if accept is true: gold you actually pay the keeper
+                                 // this round (must be <= current ask if lower).
+                                 // Use null if you accept the keeper's listed price exactly.
 }
 
 Rules:
@@ -148,7 +151,9 @@ Rules:
   hard, or walk away over small sums.
 - Use your fair price as a guide: it is the usual ceiling for a "good deal"
   for *you*, but temperament can bend it (never above purse).
-- If you accept, set counter_offer to null and walk_away to false.
+- If you accept, set counter_offer to null, walk_away to false, and set
+  agreed_price to the exact gold you pay (or null only if you pay the keeper's
+  current ask with no change).
 - Stay in character in the line; reflect the persona's voice.
 """
 
@@ -211,13 +216,16 @@ ONLY a JSON object matching this schema, no prose, no markdown fences:
   "accept": boolean,           // true = pay the keeper, false = haggle continues or refuse
   "counter_offer": integer|null, // your counter price in gold (omit on accept)
   "line": string,              // a short in-character reply (max 25 words)
-  "walk_away": boolean         // true if the rumour is not worth paying for
+  "walk_away": boolean,        // true if the rumour is not worth paying for
+  "agreed_price": integer|null // if accept: exact gold you pay (null = keeper's ask)
 }
 
 Rules:
 - The rumour is ABOUT YOU. Decide based on how much it might damage you.
 - Never accept above your coin purse.
 - Counter-offers must be a whole number of gold, >= 1.
+- If you accept, set counter_offer to null and agreed_price to what you pay
+  (or null if you pay the keeper's listed price exactly).
 - If the rumour reveals your secret or names you directly, value it more.
 - If the rumour is vague or harmless, walk away (set walk_away=true).
 - Stay strictly in character; reflect your voice and your starting attitude.
@@ -269,11 +277,14 @@ ONLY a JSON object matching this schema, no prose, no markdown fences:
   "accept": boolean,
   "counter_offer": integer|null,
   "line": string,
-  "walk_away": boolean
+  "walk_away": boolean,
+  "agreed_price": integer|null // if accept: exact gold you pay (null = keeper's ask)
 }
 
 Rules:
 - Never accept above your coin purse; never counter above your purse.
+- If you accept, set counter_offer to null and agreed_price to what you pay
+  (or null if you pay the keeper's listed price exactly).
 - If the rumour sounds juicy, actionable, or damaging to someone you
   dislike, you may pay. If it sounds dull or irrelevant, walk away.
 - Stay strictly in character.

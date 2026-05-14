@@ -1130,7 +1130,7 @@ class Game:
         decision = ev.decision
         self.dialogue.add(self.current_npc.name, decision.line)
         if decision.accept:
-            self.world.add_gold(ev.offered_price)
+            self.world.add_gold(decision.sale_gold)
             if ev.rumour_kind == "about_self":
                 self.world.adjust_reputation("townsfolk", -1)
                 rep_tail = " (-1 townsfolk)"
@@ -1141,7 +1141,7 @@ class Game:
             self.world.save()
             self.sfx.play("coin")
             self.toasts.push(
-                f"Sold the rumour for {ev.offered_price}g.{rep_tail}",
+                f"Sold the rumour for {decision.sale_gold}g.{rep_tail}",
                 GOOD,
             )
         elif decision.walk_away:
@@ -1535,12 +1535,12 @@ class Game:
         )
 
         if decision.accept:
-            self.world.add_gold(ev.offered_price)
+            self.world.add_gold(decision.sale_gold)
             self.world.adjust_reputation("townsfolk", 1)
             self.world.save()
             self.sfx.play("coin")
             self.toasts.push(
-                f"Sold {item_name} for {ev.offered_price}g. (+1 townsfolk)", GOOD
+                f"Sold {item_name} for {decision.sale_gold}g. (+1 townsfolk)", GOOD
             )
         elif decision.walk_away:
             self.toasts.push(
