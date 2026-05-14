@@ -5,6 +5,124 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-05-12 — `prompts-used.md` + README: dual development / LLM archive
+
+**Tag:** `docs`
+**Source:** user request — one file should record Cursor asks *and* tested Ollama prompts. AI-assisted (Cursor).
+
+- Rewrote [prompts-used.md](prompts-used.md) into **Part I** (chronological table of feature/tooling requests with provenance) and **Part II** (in-game prompt iterations including gossip-buy, gossip-intel, quest map-spread).
+- Added an appendix with a `render_for_log` one-liner to dump live message lists from `src/llm/prompts.py`.
+- [README.md](../README.md) now points readers at that archive after the project tree.
+
+---
+
+## 2026-05-12 — Resizable window; snap-to-top maximize reflows UI
+
+**Tag:** `ui`, `windows`
+**Source:** user request — dragging the window to the top should behave like OS maximize with layout updating. AI-assisted (Cursor).
+
+- `pygame.display.set_mode(..., pygame.RESIZABLE)` for the game and main menu (`DISPLAY_FLAGS` / `MENU_DISPLAY_FLAGS`).
+- On `pygame.VIDEORESIZE`, `_apply_window_dimensions` reclamps size, recreates the display, calls `_build_ui_layout`, and refreshes the pause menu. **Organic resize** uses `reset_flows=False` so shop modals are not wiped; **pause-menu-driven resize** still clears in-flight haggle/sell state and toasts appropriately.
+- Ignores bogus tiny sizes (`< 320×240`) to avoid minimize glitches.
+- Corner help text mentions snapping to maximize.
+
+---
+
+## 2026-05-12 — Default Full HD (1920×1080), `bottom_reserve`, preset ordering
+
+**Tag:** `ui`
+**Source:** user feedback — fit common displays; keep chat/input above the Windows taskbar. AI-assisted (Cursor).
+
+- Default window size **1920×1080**; aspect preset list leads with Full HD in `main_menu.py`.
+- `bottom_reserve` (and shared layout math) keeps the dialogue stack and action column ending above the taskbar; pause menu stays in sync when applying presets.
+
+---
+
+## 2026-05-12 — Pre-game main menu; pause menu resolution; `Music/` BGM path; import fixes
+
+**Tag:** `ui`, `audio`, `dx`
+**Source:** user requests — choose aspect before play; change size from pause; use audio under project `Music/`; fix launch crash (`NameError: MainMenu`, market symbols). AI-assisted (Cursor).
+
+- **MainMenu** (`src/game/main_menu.py`) runs before `Game`; returns `(width, height)` or quit. Respects `VIDEORESIZE` while on the menu.
+- **PauseMenu** can change resolution with the same preset list / relayout hook as the main loop.
+- **MusicPlayer** in `src/game/assets.py` resolves a track from project **`Music/`** before `assets/music/` so shipped or user-added MP3s (e.g. course asset) load without renaming paths.
+- Wired missing imports (`MainMenu`, market helpers) in `src/main.py` so `--skip-menu` / market flows start cleanly.
+
+---
+
+## 2026-05-12 — Leave the bar restored; wholesale market on world map
+
+**Tag:** `feature`, `ui`, `world`
+**Source:** user report — leave-tavern action missing; wanted tavern supplies market **as a map destination**, not another overcrowded action button. AI-assisted (Cursor).
+
+- **Leave the bar** again opens world exploration when quests allow; flow matches TAVERN → WORLD_MAP → LOCATION.
+- **Wholesale Row** (or equivalent market hotspot) is a **world-map location** for buying tavern resources, not a separate tavern-only button row.
+
+---
+
+## 2026-05-12 — Gossip journal modal: text containment and word wrap
+
+**Tag:** `ui`
+**Source:** user report — gossip lines overflowed the brown panel and did not wrap. AI-assisted (Cursor).
+
+- Modal layout uses bounded width for rumour text and word-wrapping so long lines and tokens break inside the frame (footer/actions unchanged).
+
+---
+
+## 2026-05-11 — Wrong hotspot: escalating satirical feedback
+
+**Tag:** `feature`, `ui`
+**Source:** user request — when the player keeps searching empty spots, responses should get cheeky (“you just checked…”). AI-assisted (Cursor).
+
+- Repeat wrong clicks on the same or wrong hotspots surface escalating copy (no extra LLM call) so empty searches feel reactive, not flat.
+
+---
+
+## 2026-05-11 — Crash fix: Leave the bar / toast rendering
+
+**Tag:** `dx`, `ui`
+**Source:** user traceback — `font.render` choked on a bad toast argument when leaving the bar. AI-assisted (Cursor).
+
+- Normalized toast payload / typing so every queued message is a valid string for the UI font renderer.
+
+---
+
+## 2026-05-11 — NPC portrait: remove stray highlight stroke
+
+**Tag:** `ui`
+**Source:** user request — remove the line from character faces. AI-assisted (Cursor).
+
+- Portrait drawing no longer draws the distracting edge/highlight line on NPC silhouettes.
+
+---
+
+## 2026-05-11 — One-click Windows launchers (`run_game.bat`, `setup.bat`)
+
+**Tag:** `dx`, `windows`
+**Source:** user request — avoid opening PowerShell every time. AI-assisted (Cursor).
+
+- Batch files set `cd` to the repo, use the venv’s `python` when present, and document double-click workflow in README.
+
+---
+
+## 2026-05-11 — Side action panel (buttons) as primary UX; slash commands remain
+
+**Tag:** `ui`
+**Source:** user request — actions beside the chat instead of only `/sell`, `/quest`, etc. AI-assisted (Cursor).
+
+- **ActionPanel** lists haggle/sell/quest/next/save/help (and later world/journal buttons) with modals for multi-step flows; slash commands kept as shortcuts for power users.
+
+---
+
+## 2026-05-11 — Dialogue panel transparency; player + name tag above chat stack
+
+**Tag:** `ui`
+**Source:** user request — more transparent AI text area; player identity above the box. AI-assisted (Cursor).
+
+- Adjusted dialogue surface alpha and repositioned player label/portrait so the tavern scene reads behind the transcript.
+
+---
+
 ## 2026-05-12 — Quest generation steers across all map regions
 
 **Tag:** `prompt`, `world`
@@ -115,8 +233,9 @@ bar, an option to sell them the info for a price the player enters").
   coin / quest WAVs, which weren't shipped either). The tavern was
   silent on a clean clone.
 - Added a `MusicPlayer` in `src/game/assets.py` that drives the
-  `pygame.mixer.music` channel. It looks for a track in
-  `assets/music/` first (any `.ogg`/`.wav`/`.mp3`, alphabetical first
+  `pygame.mixer.music` channel. It looks for a track under the project
+  **`Music/`** folder first (course or user-supplied `.mp3`/etc.), then
+  `assets/music/` (any `.ogg`/`.wav`/`.mp3`, alphabetical first
   wins) so a player can drop in a real piece of music without touching
   code. If nothing is there, it generates a 16-second warm-pad
   ambience procedurally (`array` + `wave`, no numpy dependency) and
