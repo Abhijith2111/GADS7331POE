@@ -10,6 +10,7 @@ from .assets import load_font
 from .ui import HIGHLIGHT, INK_SOFT, PARCHMENT
 
 MENU_WINDOW_SIZE = (960, 640)
+MENU_DISPLAY_FLAGS = pygame.RESIZABLE
 
 # Shared vertical resolution for compact presets (taller screens use explicit WxH).
 _BASE_H = 880
@@ -67,7 +68,7 @@ class MainMenu:
     def run(self) -> tuple[int, int] | None:
         """Return ``(width, height)`` for the game, or ``None`` if the user quits."""
         sw, sh = MENU_WINDOW_SIZE
-        screen = pygame.display.set_mode(MENU_WINDOW_SIZE)
+        screen = pygame.display.set_mode(MENU_WINDOW_SIZE, MENU_DISPLAY_FLAGS)
         self._layout(sw, sh)
 
         running = True
@@ -79,6 +80,14 @@ class MainMenu:
                 if event.type == pygame.QUIT:
                     running = False
                     break
+                if event.type == pygame.VIDEORESIZE:
+                    if event.w < 320 or event.h < 240:
+                        continue
+                    sw = max(640, min(event.w, 7680))
+                    sh = max(480, min(event.h, 4320))
+                    screen = pygame.display.set_mode((sw, sh), MENU_DISPLAY_FLAGS)
+                    self._layout(sw, sh)
+                    continue
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         running = False

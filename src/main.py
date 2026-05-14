@@ -77,6 +77,10 @@ DEFAULT_SCREEN_SIZE: tuple[int, int] = (1920, 1080)
 TITLE = "The Wandering Goblet"
 ITEMS_PATH = Path("data") / "items.json"
 
+# Resizable: lets the OS maximize when the player snaps the window to the
+# top of the screen (Windows / some WMs). ``VIDEORESIZE`` reflows the UI.
+DISPLAY_FLAGS = pygame.RESIZABLE
+
 
 # ---------------------------------------------------------------------------
 # Worker -> main thread events
@@ -193,7 +197,7 @@ class Game:
         pygame.init()
         pygame.display.set_caption(TITLE)
         self.screen_size = screen_size or DEFAULT_SCREEN_SIZE
-        self.screen = pygame.display.set_mode(self.screen_size)
+        self.screen = pygame.display.set_mode(self.screen_size, DISPLAY_FLAGS)
         self.clock = pygame.time.Clock()
         self.font = load_font(20)
         self.title_font = load_font(46, bold=True)
@@ -334,22 +338,35 @@ class Game:
         self.world_map_scene = WorldMapScene(canvas_rect)
         self.location_scene = LocationScene(canvas_rect)
 
-    def _relayout_after_resize(self, w: int, h: int) -> None:
-        """Apply a new window size and rebuild layout; closes modal / sell flows."""
+    def _apply_window_dimensions(self, w: int, h: int, *, reset_flows: bool) -> None:
+        """Resize the display and rebuild layout. Optionally clears haggle/modal flows."""
+        w0, h0 = int(w), int(h)
+        if w0 < 320 or h0 < 240:
+            return
+        w = max(800, min(w0, 7680))
+        h = max(600, min(h0, 4320))
+        had_modal = self.modal.visible
         self.screen_size = (w, h)
-        self.screen = pygame.display.set_mode(self.screen_size)
+        self.screen = pygame.display.set_mode(self.screen_size, DISPLAY_FLAGS)
         self._build_ui_layout()
-        self._pending_haggle_item = None
-        self._pending_haggle_offer = None
-        self._sell_item = None
-        self._sell_offer = 0
-        self._gossip_sell_text = None
-        self._gossip_sell_offer = 5
-        self._gossip_sell_kind = "about_self"
-        self._gossip_subject_label = ""
+        if reset_flows:
+            self._pending_haggle_item = None
+            self._pending_haggle_offer = None
+            self._sell_item = None
+            self._sell_offer = 0
+            self._gossip_sell_text = None
+            self._gossip_sell_offer = 5
+            self._gossip_sell_kind = "about_self"
+            self._gossip_subject_label = ""
+        elif had_modal:
+            self.toasts.push("Window resized — reopen any dialog if you need it.", HIGHLIGHT)
         self._refresh_action_buttons()
         self._pause_menu.layout(w, h)
         self._pause_menu.sync_selection_to_current(w, h)
+
+    def _relayout_after_resize(self, w: int, h: int) -> None:
+        """Apply size from pause menu / settings; clears in-flight shop flows."""
+        self._apply_window_dimensions(w, h, reset_flows=True)
         self.toasts.push(
             "Display size updated. Any open shop dialogs were closed.",
             GOOD,
@@ -1903,6 +1920,11 @@ class Game:
                 if event.type == pygame.QUIT:
                     running = False
                     continue
+                if event.type == pygame.VIDEORESIZE:
+                    self._apply_window_dimensions(event.w, event.h, reset_flows=False)
+                    if self.paused:
+                        self._pause_menu.layout(*self.screen_size)
+                    continue
                 if self.paused:
                     act = self._pause_menu.handle_event(event)
                     if act == "resume":
@@ -2022,7 +2044,7 @@ class Game:
 
     def _draw_corner_help(self) -> None:
         font = load_font(14)
-        text = "F1 help   F2 settings   F5 next customer   T banner   Esc pause"
+        text = "F1 help   F2 settings   F5 next customer   T banner   Esc pause   drag top edge to maximize"
         surf = font.render(text, True, (180, 140, 70))
         # Sit just above the input bar so the hint stays visible with taskbars.
         target_y = self.text_input.rect.top - 6 - surf.get_height()
