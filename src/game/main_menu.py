@@ -82,6 +82,11 @@ class MainMenu:
         self._confirm_no_rect = pygame.Rect(0, 0, 1, 1)
         self._dragging_volume = False
         self._pending_overwrite_slot: int | None = None
+        # Window-size picker overlay (opened from the Window size button).
+        self._choosing_aspect = False
+        self._aspect_panel_rect = pygame.Rect(0, 0, 1, 1)
+        self._aspect_option_rects: list[tuple[pygame.Rect, int]] = []
+        self._aspect_back_rect = pygame.Rect(0, 0, 1, 1)
 
     def _layout(self, sw: int, sh: int) -> None:
         cx = sw // 2
@@ -99,16 +104,16 @@ class MainMenu:
         btn_w = (bw - 12) // 2
         self._new_rect = pygame.Rect(x0, y, btn_w, 44)
         self._continue_rect = pygame.Rect(x0 + btn_w + 12, y, btn_w, 44)
-        y += 58
+        y += 80  # generous gap so the volume label clears the buttons above
 
         # Settings: music volume, then resolution (window size).
         self._vol_minus_rect = pygame.Rect(x0, y, 36, 32)
         self._vol_track_rect = pygame.Rect(x0 + 44, y + 10, bw - 88, 12)
         self._vol_plus_rect = pygame.Rect(x0 + bw - 36, y, 36, 32)
-        y += 46
-
-        self._aspect_rect = pygame.Rect(x0, y, bw, 34)
         y += 50
+
+        self._aspect_rect = pygame.Rect(x0, y, bw, 38)
+        y += 54
 
         # Help then Quit at the bottom.
         self._help_rect = pygame.Rect(x0, y, btn_w, 40)
@@ -117,6 +122,22 @@ class MainMenu:
         cy = sh // 2
         self._confirm_yes_rect = pygame.Rect(cx - 210, cy + 40, 180, 40)
         self._confirm_no_rect = pygame.Rect(cx + 30, cy + 40, 180, 40)
+
+        # Window-size picker overlay (centred, lists every preset).
+        n = len(ASPECT_OPTIONS)
+        opt_h = 40
+        opt_gap = 6
+        apw = min(560, sw - 60)
+        aph = min(110 + n * (opt_h + opt_gap) + 16, sh - 40)
+        apx = (sw - apw) // 2
+        apy = (sh - aph) // 2
+        self._aspect_panel_rect = pygame.Rect(apx, apy, apw, aph)
+        self._aspect_option_rects = []
+        oy = apy + 64
+        for i in range(n):
+            r = pygame.Rect(apx + 20, oy + i * (opt_h + opt_gap), apw - 40, opt_h)
+            self._aspect_option_rects.append((r, i))
+        self._aspect_back_rect = pygame.Rect(apx + apw - 140, apy + aph - 50, 120, 38)
 
     def _slot_label(self, summary: SaveSlotSummary) -> str:
         if not summary.exists:
@@ -158,6 +179,45 @@ class MainMenu:
             return None
         return self._finish(new_game=True)
 
+    def _draw_aspect_picker(
+        self, screen: pygame.Surface, sw: int, sh: int, mouse: tuple[int, int]
+    ) -> None:
+        overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 170))
+        screen.blit(overlay, (0, 0))
+
+        pr = self._aspect_panel_rect
+        pygame.draw.rect(screen, (38, 26, 18), pr, border_radius=12)
+        pygame.draw.rect(screen, HIGHLIGHT, pr, 3, border_radius=12)
+
+        title = self.heading_font.render("Choose window size", True, HIGHLIGHT)
+        screen.blit(title, (pr.centerx - title.get_width() // 2, pr.top + 18))
+
+        for rect, idx in self._aspect_option_rects:
+            opt = ASPECT_OPTIONS[idx]
+            picked = idx == self._aspect_index
+            hot = rect.collidepoint(mouse)
+            bg = (72, 52, 32) if picked else ((58, 42, 26) if hot else (44, 32, 22))
+            pygame.draw.rect(screen, bg, rect, border_radius=6)
+            pygame.draw.rect(screen, HIGHLIGHT if picked else (120, 90, 50), rect, 2, border_radius=6)
+            lbl = self.body_font.render(
+                f"{opt.label}  ({opt.width}\u00d7{opt.height})", True, PARCHMENT
+            )
+            screen.blit(lbl, (rect.left + 12, rect.centery - lbl.get_height() // 2))
+
+        hot = self._aspect_back_rect.collidepoint(mouse)
+        bg = (100, 70, 36) if hot else (58, 42, 26)
+        pygame.draw.rect(screen, bg, self._aspect_back_rect, border_radius=8)
+        pygame.draw.rect(screen, HIGHLIGHT, self._aspect_back_rect, 2, border_radius=8)
+        bsurf = self.body_font.render("Back", True, PARCHMENT)
+        screen.blit(
+            bsurf,
+            (
+                self._aspect_back_rect.centerx - bsurf.get_width() // 2,
+                self._aspect_back_rect.centery - bsurf.get_height() // 2,
+            ),
+        )
+
     def run(self) -> MenuResult | None:
         sw, sh = MENU_WINDOW_SIZE
         screen = pygame.display.set_mode(MENU_WINDOW_SIZE, MENU_DISPLAY_FLAGS)
@@ -181,6 +241,25 @@ class MainMenu:
                     sh = max(480, min(event.h, 4320))
                     screen = pygame.display.set_mode((sw, sh), MENU_DISPLAY_FLAGS)
                     self._layout(sw, sh)
+                    continue
+
+                if self._choosing_aspect:
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                        self._choosing_aspect = False
+                    elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        mx, my = event.pos
+                        chosen = False
+                        for rect, idx in self._aspect_option_rects:
+                            if rect.collidepoint(mx, my):
+                                self._aspect_index = idx
+                                self._choosing_aspect = False
+                                chosen = True
+                                break
+                        if not chosen and (
+                            self._aspect_back_rect.collidepoint(mx, my)
+                            or not self._aspect_panel_rect.collidepoint(mx, my)
+                        ):
+                            self._choosing_aspect = False
                     continue
 
                 if self._pending_overwrite_slot is not None:
@@ -234,7 +313,7 @@ class MainMenu:
                         self._dragging_volume = True
                         self._set_volume(self._volume_from_x(mx))
                     elif self._aspect_rect.collidepoint(mx, my):
-                        self._aspect_index = (self._aspect_index + 1) % len(ASPECT_OPTIONS)
+                        self._choosing_aspect = True
                     elif self._new_rect.collidepoint(mx, my):
                         picked = self._try_new_game()
                         if picked is not None:
@@ -313,11 +392,13 @@ class MainMenu:
             pygame.draw.rect(screen, (120, 90, 50), ar, 2, border_radius=6)
             asp = ASPECT_OPTIONS[self._aspect_index]
             asp_txt = self.body_font.render(
-                f"Window: {asp.label} ({asp.width}×{asp.height}) — click to cycle",
+                f"Window size: {asp.label} ({asp.width}\u00d7{asp.height})",
                 True,
                 PARCHMENT,
             )
             screen.blit(asp_txt, (ar.left + 12, ar.centery - asp_txt.get_height() // 2))
+            tap = self.small_font.render("change >", True, INK_SOFT)
+            screen.blit(tap, (ar.right - tap.get_width() - 12, ar.centery - tap.get_height() // 2))
 
             can_continue = slot_has_save(self._selected_slot)
             for rect, label, enabled, primary in (
@@ -383,6 +464,9 @@ class MainMenu:
                         surf,
                         (rect.centerx - surf.get_width() // 2, rect.centery - surf.get_height() // 2),
                     )
+
+            if self._choosing_aspect:
+                self._draw_aspect_picker(screen, sw, sh, mouse)
 
             hint = self.small_font.render(
                 "1/2/3 select slot   New Game / Continue   F1 help   Esc quit",

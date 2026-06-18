@@ -5,6 +5,18 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-06-18 — Window-size picker, tidier corner hint, no-overlap volume row
+
+**Tag:** `ui`, `ux`
+**Source:** user request — replace click-to-cycle resolution with a button that opens a list of all sizes (same for main menu and pause menu), drop the "T banner" corner hint, and stop the volume slider/label overlapping other text. AI-assisted (Cursor).
+
+- **Resolution picker:** both menus now show a single **Window size** button (with the current preset). Clicking it opens a centred overlay listing every preset; picking one selects it (and in the pause menu applies immediately). `MainMenu._choosing_aspect` / `PauseMenu._choosing_size` drive the overlays, with Back / click-outside / Esc to close.
+- **Pause menu simplified:** the inline preset list is gone, freeing space; footer is now Resume / Main Menu / Quit, with the Window size button in the body above them.
+- **Corner hint:** removed the "T banner" token from the in-game hint line (the **T** key still toggles the banner).
+- **No overlap:** widened the main-menu gap above the volume row so the "Music volume" label clears the New Game / Continue buttons, and nudged the pause-menu label spacing; avoided arrow glyphs (which render as boxes in the bundled font) in favour of a plain `change >` affordance.
+
+---
+
 ## 2026-06-18 — Pause-menu volume, in-game Quit, and conventional menu ordering
 
 **Tag:** `feature`, `ui`, `ux`

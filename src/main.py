@@ -2287,7 +2287,7 @@ class Game:
 
     def _draw_corner_help(self) -> None:
         font = load_font(14)
-        text = "F1 help   F2 settings   F5 next customer   T banner   Esc pause   drag top edge to maximize"
+        text = "F1 help   F2 settings   F5 next customer   Esc pause   drag top edge to maximize"
         surf = font.render(text, True, (180, 140, 70))
         # Sit just above the conversation box (the text area between the
         # player and the AI) so the words are never clipped by its border.
