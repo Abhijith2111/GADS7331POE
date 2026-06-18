@@ -5,6 +5,16 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-06-18 — F2 settings: labels fit their buttons, colour-coded
+
+**Tag:** `ui`, `ux`
+**Source:** user request — keep all text inside the F2 settings buttons and colour them by function. AI-assisted (Cursor).
+
+- **Fit-to-button labels:** `ModalPanel` now shrinks a button's font (down from 20pt) until the label fits the button width, so long labels like "Regenerate last reply" no longer spill over the border. Settings buttons are also auto-sized to their text in `_open_settings`.
+- **Colour coding:** the F2 buttons now use distinct accents that mirror the action panel — blue (Cycle model), amber (Temp -/+), violet (Toggle banner), green (Regenerate last reply), teal (Re-check Ollama), and muted red (Close). `Button` gained an optional `accent` colour, and `ModalPanel` derives hover/disabled shades from it via `shift_color`.
+
+---
+
 ## 2026-06-18 — Group music + screen size under an Options button
 
 **Tag:** `ui`, `ux`

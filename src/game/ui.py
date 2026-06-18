@@ -363,6 +363,8 @@ class Button:
     enabled: bool = True
     # Optional drawn arrow: "right" (expands a group) or "left" (go back).
     arrow: str | None = None
+    # Optional accent colour (modal buttons); falls back to default amber.
+    accent: tuple[int, int, int] | None = None
 
 
 def draw_arrow(
@@ -416,6 +418,16 @@ class ModalPanel:
     def hide(self) -> None:
         self.visible = False
         self.buttons = []
+
+    def _fit_button_font(self, label: str, max_w: int) -> pygame.font.Font:
+        """Return the largest font (<= the default) whose label fits ``max_w``."""
+        if max_w <= 0 or self.button_font.size(label)[0] <= max_w:
+            return self.button_font
+        for size in (18, 16, 14, 12, 11):
+            font = load_font(size, bold=True)
+            if font.size(label)[0] <= max_w:
+                return font
+        return load_font(11, bold=True)
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         if not self.visible:
@@ -487,12 +499,23 @@ class ModalPanel:
             surface.set_clip(previous_clip)
 
         for b in self.buttons:
-            base = (90, 60, 30) if b.enabled else (50, 40, 30)
-            if b.hot:
-                base = (130, 90, 40)
+            accent = b.accent if b.accent is not None else _DEFAULT_BUTTON_ACCENT
+            if not b.enabled:
+                base = shift_color(accent, -45)
+                border = INK_SOFT
+                fg = INK_SOFT
+            elif b.hot:
+                base = shift_color(accent, 35)
+                border = shift_color(accent, 90)
+                fg = PARCHMENT
+            else:
+                base = accent
+                border = shift_color(accent, 70)
+                fg = PARCHMENT
             pygame.draw.rect(surface, base, b.rect, border_radius=6)
-            pygame.draw.rect(surface, HIGHLIGHT if b.enabled else INK_SOFT, b.rect, 2, border_radius=6)
-            label = self.button_font.render(b.label, True, PARCHMENT)
+            pygame.draw.rect(surface, border, b.rect, 2, border_radius=6)
+            font = self._fit_button_font(b.label, b.rect.width - 16)
+            label = font.render(b.label, True, fg)
             surface.blit(
                 label,
                 (

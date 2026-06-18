@@ -1870,37 +1870,57 @@ class Game:
         body = "\n".join(body_lines)
 
         modal_rect = self.modal.rect
-        bx = modal_rect.left + 20
-        by1 = modal_rect.bottom - 110
-        by2 = modal_rect.bottom - 60
-        bw, bh = 130, 38
         regen_enabled = self._can_regenerate()
-        buttons = [
-            Button("Cycle model", pygame.Rect(bx, by1, bw, bh), self._cycle_model),
-            Button("Temp -", pygame.Rect(bx + bw + 10, by1, 80, bh), self._temp_down),
-            Button("Temp +", pygame.Rect(bx + bw + 100, by1, 80, bh), self._temp_up),
-            Button(
-                "Toggle banner",
-                pygame.Rect(bx + bw + 200, by1, 160, bh),
-                self._toggle_banner,
-            ),
-            Button(
-                "Regenerate last reply",
-                pygame.Rect(bx, by2, 220, bh),
-                self._regenerate_last_reply,
-                enabled=regen_enabled,
-            ),
-            Button(
-                "Re-check Ollama",
-                pygame.Rect(bx + 230, by2, 160, bh),
-                self._recheck_ollama,
-            ),
-            Button(
-                "Close",
-                pygame.Rect(modal_rect.right - bw - 20, by2, bw, bh),
-                self.modal.hide,
-            ),
+
+        # Colour key for the settings buttons (kept distinct so functions read
+        # at a glance, mirroring the colour-coded action panel).
+        C_MODEL = (52, 84, 124)   # blue   — model selection
+        C_TEMP = (124, 90, 36)    # amber  — numeric tweaks
+        C_BANNER = (110, 66, 128)  # violet — banner toggle
+        C_REGEN = (74, 120, 58)   # green  — re-run an action
+        C_OLLAMA = (46, 108, 104)  # teal   — connection check
+        C_CLOSE = (120, 64, 52)   # muted red — dismiss
+
+        bx = modal_rect.left + 20
+        bh = 38
+        gap = 10
+        by1 = modal_rect.bottom - 110
+        by2 = modal_rect.bottom - 56
+        bfont = self.modal.button_font
+
+        def width_for(label: str, minimum: int = 70) -> int:
+            return max(minimum, bfont.size(label)[0] + 28)
+
+        # Row 1: model + temperature + banner.
+        row1 = [
+            ("Cycle model", self._cycle_model, C_MODEL, True),
+            ("Temp -", self._temp_down, C_TEMP, True),
+            ("Temp +", self._temp_up, C_TEMP, True),
+            ("Toggle banner", self._toggle_banner, C_BANNER, True),
         ]
+        # Row 2: regenerate + re-check + close.
+        row2 = [
+            ("Regenerate last reply", self._regenerate_last_reply, C_REGEN, regen_enabled),
+            ("Re-check Ollama", self._recheck_ollama, C_OLLAMA, True),
+            ("Close", self.modal.hide, C_CLOSE, True),
+        ]
+
+        buttons = []
+        for row, y in ((row1, by1), (row2, by2)):
+            x = bx
+            for label, cb, accent, enabled in row:
+                w = width_for(label)
+                buttons.append(
+                    Button(
+                        label,
+                        pygame.Rect(x, y, w, bh),
+                        cb,
+                        enabled=enabled,
+                        accent=accent,
+                    )
+                )
+                x += w + gap
+
         self.modal.show("Settings", body, buttons)
 
     def _recheck_ollama(self) -> None:
