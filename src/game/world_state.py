@@ -1,6 +1,6 @@
 """World state: the single shared bag of facts the LLM is conditioned on.
 
-The world state is plain JSON and lives at ``data/savegame.json`` so that
+The world state is plain JSON and lives in a save slot file so that
 the player (and the marker) can open it in any text editor and watch it
 mutate while the game runs. This is intentional: it makes the LLM's
 inputs visible during video evidence, and keeps the integration easy to
@@ -14,11 +14,13 @@ game treats writes as cheap and immediate.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .market import DEFAULT_TAVERN_SUPPLIES
+from .paths import save_slot_path
 from .world_map_data import (
     DEFAULT_HOTSPOT_ID,
     DEFAULT_LOCATION_ID,
@@ -27,7 +29,7 @@ from .world_map_data import (
 )
 
 
-DEFAULT_PATH = Path("data") / "savegame.json"
+DEFAULT_PATH = save_slot_path(1)
 
 # Reputation tracks player standing with three loose factions. Numbers
 # stay in [-100, 100] for sanity. Used in prompts and in NPC spawn logic.
@@ -47,6 +49,8 @@ class WorldState:
     reputation: dict[str, int] = field(default_factory=lambda: {k: 0 for k in REPUTATION_KEYS})
     tavern_supplies: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_TAVERN_SUPPLIES))
     gossip_heard: list[str] = field(default_factory=list)
+    rumours_pending: list[str] = field(default_factory=list)
+    rumour_memory: list[str] = field(default_factory=list)
     active_quests: list[dict[str, Any]] = field(default_factory=list)
     completed_quests: list[dict[str, Any]] = field(default_factory=list)
     served_personas: list[str] = field(default_factory=list)
@@ -72,12 +76,20 @@ class WorldState:
         # be impossible to complete in the new exploration flow.
         active = [_normalise_quest(q) for q in data.get("active_quests", [])]
         supplies = _merge_tavern_supplies(data)
+        gossip_heard = list(data.get("gossip_heard", []))
+        rumours_pending = list(data.get("rumours_pending", []))
+        rumour_memory = list(data.get("rumour_memory", []))
+        # Older saves used gossip_heard as the keeper's sellable journal.
+        if not rumour_memory and gossip_heard and "rumour_memory" not in data:
+            rumour_memory = list(gossip_heard)
         return cls(
             path=path,
             gold=int(data.get("gold", 50)),
             reputation=rep,
             tavern_supplies=supplies,
-            gossip_heard=list(data.get("gossip_heard", [])),
+            gossip_heard=gossip_heard,
+            rumours_pending=rumours_pending,
+            rumour_memory=rumour_memory,
             active_quests=active,
             completed_quests=list(data.get("completed_quests", [])),
             served_personas=list(data.get("served_personas", [])),
@@ -90,6 +102,8 @@ class WorldState:
             "reputation": self.reputation,
             "tavern_supplies": self.tavern_supplies,
             "gossip_heard": self.gossip_heard,
+            "rumours_pending": self.rumours_pending,
+            "rumour_memory": self.rumour_memory,
             "active_quests": self.active_quests,
             "completed_quests": self.completed_quests,
             "served_personas": self.served_personas,
@@ -116,17 +130,58 @@ class WorldState:
         self.reputation[faction] = max(lo, min(hi, self.reputation[faction] + int(delta)))
 
     def add_gossip(self, line: str) -> bool:
-        """Append a line of gossip if new. Returns True when added."""
+        """Append a line of town gossip if new. Returns True when added."""
         line = line.strip()
         if not line:
             return False
-        if line in self.gossip_heard:
+        key = _normalize_rumour(line)
+        if any(_normalize_rumour(existing) == key for existing in self.gossip_heard):
             return False
         self.gossip_heard.append(line)
         if len(self.gossip_heard) > MAX_GOSSIP:
             # Drop the oldest, not the newest, so prompts stay fresh.
             self.gossip_heard = self.gossip_heard[-MAX_GOSSIP:]
         return True
+
+    def is_known_rumour(self, line: str) -> bool:
+        """True when the line already exists in any rumour pool."""
+        key = _normalize_rumour(line)
+        if not key:
+            return True
+        pools = self.rumours_pending + self.rumour_memory + self.gossip_heard
+        return any(_normalize_rumour(existing) == key for existing in pools)
+
+    def add_rumour_overheard(self, line: str) -> bool:
+        """Stage an overheard line for the keeper to remember later."""
+        line = line.strip()
+        if not line or self.is_known_rumour(line):
+            return False
+        self.rumours_pending.append(line)
+        if len(self.rumours_pending) > MAX_GOSSIP:
+            self.rumours_pending = self.rumours_pending[-MAX_GOSSIP:]
+        return True
+
+    def commit_rumour_to_memory(self, line: str) -> bool:
+        """Move a pending line into keeper memory and town gossip."""
+        line = line.strip()
+        if not line or line in self.rumour_memory:
+            return False
+        try:
+            self.rumours_pending.remove(line)
+        except ValueError:
+            return False
+        self.rumour_memory.append(line)
+        if len(self.rumour_memory) > MAX_GOSSIP:
+            self.rumour_memory = self.rumour_memory[-MAX_GOSSIP:]
+        self.add_gossip(line)
+        return True
+
+    def remove_from_memory(self, line: str) -> None:
+        """Drop a memorised rumour after it has been sold or spread."""
+        try:
+            self.rumour_memory.remove(line)
+        except ValueError:
+            pass
 
     def mark_persona_served(self, persona_id: str) -> None:
         if persona_id not in self.served_personas:
@@ -199,6 +254,11 @@ class WorldState:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+def _normalize_rumour(text: str) -> str:
+    """Lowercase, strip, and collapse whitespace for dedup checks."""
+    return re.sub(r"\s+", " ", text.strip().lower())
+
+
 def _merge_tavern_supplies(data: dict[str, Any]) -> dict[str, int]:
     """Fill in defaults for saves that pre-date ``tavern_supplies``."""
     out = dict(DEFAULT_TAVERN_SUPPLIES)

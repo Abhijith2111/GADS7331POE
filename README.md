@@ -19,30 +19,20 @@ shopkeeper genre depends on (does this customer accept your price?).
 
 ## Easy launch (Windows)
 
-If you are on Windows and just want to play, no PowerShell required:
+1. Install **Python 3.11+** and **Ollama** once from
+   <https://ollama.com/download> (~2 GB model downloads on first run).
+2. Double-click **[setup.bat](setup.bat)** once.
+3. Double-click **[run_game.bat](run_game.bat)** to play.
 
-1. Install **Python 3.11+** from <https://www.python.org/downloads/windows/>
-   (tick *"Add python.exe to PATH"* during install) and **Ollama** from
-   <https://ollama.com/download>.
-2. Double-click **[setup.bat](setup.bat)** once. It creates the virtual
-   environment, installs dependencies, and pre-pulls the default Ollama
-   model.
-3. Double-click **[run_game.bat](run_game.bat)** any time you want to
-   play.
-
-The game auto-starts the Ollama daemon on launch (no need to run
-`ollama serve` yourself) and auto-pulls the default model if it
-isn't on disk yet. The first launch shows a "Downloading
-llama3.2:3b..." toast with live progress; subsequent launches are
-near-instant because the model stays warm via `keep_alive`.
+The **main menu** lets you pick one of **three save slots**, adjust
+**music volume**, start a **New Game** or **Continue**, and choose
+window size. Saves and settings live under `data/saves/` and
+`data/settings.json`. The game auto-starts Ollama if installed.
 
 Optional extras:
 
-- **[run_demo.bat](run_demo.bat)** — double-click to launch the scripted
-  demo session (fixed seed + prompt logs) used for video evidence.
-- **[make_desktop_shortcut.bat](make_desktop_shortcut.bat)** — run once
-  to drop a "The Tavern Master" shortcut on your Desktop pointing at
-  `run_game.bat`.
+- **[run_demo.bat](run_demo.bat)** — scripted demo session (fixed seed + prompt logs).
+- **[make_desktop_shortcut.bat](make_desktop_shortcut.bat)** — Desktop shortcut to `run_game.bat`.
 
 The Quick Start below still works for any platform or for users who
 prefer the command line.
@@ -102,11 +92,37 @@ This:
   - `/sell <item_id> <price>` — offer to sell at a price (starts a haggle).
   - `/quest` — ask the customer if they have any work.
   - `/next` — send this customer away, spawn the next one.
-  - `/save` — persist `data/savegame.json`.
-  - `/help` — in-game cheat-sheet.
+  - `/save` — persist the active save slot.
+  - `/help` — open the in-game help guide.
 - **F1** help, **F2** settings (model picker / temperature / regenerate
   last reply / banner toggle), **F5** next customer, **T** hide the AI
-  notice, **M** mute/unmute background music, **Esc** quit.
+  notice, **M** mute/unmute background music, **Esc** pause menu.
+
+### Start-up flow
+
+- The **main menu** offers **New Game / Continue / Help / Quit**. The
+  **Help** button (or **F1**) opens an illustrated guide that explains the
+  screen layout and what every action button does.
+- After you pick a slot, a short **briefing screen** describes what you'll
+  be doing before play begins (with its own **Begin / Help / Back** buttons).
+
+### Action panel (grouped & colour-coded)
+
+The buttons on the right of the bar are **grouped by purpose** and tinted
+so they don't blend together. Buttons with a small **▶ arrow** expand into
+a sub-list with a **◀ Back** button:
+
+- **Trade ▶** (amber) — *Show stock*, *Sell item…*
+- **Quests ▶** (blue) — *Ask for work*, *View quests*
+- **View gossip** (violet) — standalone
+- **Next customer** (teal) / **Leave the bar** (green) — standalone
+- **Menu ▶** (slate) — *Save game*, *Help*
+
+### Pause menu (Esc)
+
+Press **Esc** to pause. From there you can **Resume**, change the **window
+size**, return to the **Main Menu**, or **Quit**. Choosing Main Menu or Quit
+first asks whether you want to **save** so progress is never lost by accident.
 
 ### Background music
 
@@ -172,17 +188,26 @@ GADS7331POE/
 ├─ src/
 │  ├─ main.py
 │  ├─ game/                  ← Pygame layer
+│  │  ├─ main_menu.py        ← save-slot launcher (+ Help button)
+│  │  ├─ info_screens.py     ← briefing + illustrated help guide
+│  │  ├─ pause_menu.py       ← Esc pause (resume / menu / quit + save prompt)
+│  │  ├─ ui.py               ← widgets, colour-coded action panel
+│  │  └─ ...                 ← scene, world map, npc, settings, save slots
 │  └─ llm/                   ← Ollama client, prompts, parsers
 ├─ data/
 │  ├─ personas/              ← 5x persona JSONs (modifiable)
 │  ├─ items.json
-│  └─ savegame.json
+│  └─ saves/                 ← three save slots + settings.json
 ├─ assets/
 │  ├─ sprites/               ← optional, falls back to procedural art
 │  ├─ fonts/                 ← optional, falls back to system serif
 │  └─ sfx/                   ← optional door/coin/quest WAVs
 └─ tests/
-   └─ test_parsers.py
+   ├─ test_parsers.py
+   ├─ test_paths.py
+   ├─ test_rumour_memory.py
+   ├─ test_save_slots.py
+   └─ test_settings.py
 ```
 
 [`docs/prompts-used.md`](docs/prompts-used.md) is the **combined archive**: Part I logs what was asked for in Cursor (features and tooling), Part II logs Ollama prompt iterations; the appendix shows how to dump current prompts with `render_for_log`.

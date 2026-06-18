@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 
-PERSONA_DIR = Path("data") / "personas"
+from .paths import personas_dir
 
 
 def personas_mentioned_in_text(
@@ -88,8 +88,9 @@ def last_npc_counter(haggle_history: list[dict[str, Any]]) -> int | None:
 # ---------------------------------------------------------------------------
 # Persona loading
 # ---------------------------------------------------------------------------
-def load_personas(directory: Path = PERSONA_DIR) -> list[dict[str, Any]]:
+def load_personas(directory: Path | None = None) -> list[dict[str, Any]]:
     """Load every persona JSON in the directory, sorted by id."""
+    directory = directory or personas_dir()
     personas: list[dict[str, Any]] = []
     for path in sorted(directory.glob("*.json")):
         with open(path, "r", encoding="utf-8") as fh:
@@ -102,7 +103,8 @@ def load_personas(directory: Path = PERSONA_DIR) -> list[dict[str, Any]]:
     return personas
 
 
-def load_persona_by_id(persona_id: str, directory: Path = PERSONA_DIR) -> dict[str, Any]:
+def load_persona_by_id(persona_id: str, directory: Path | None = None) -> dict[str, Any]:
+    directory = directory or personas_dir()
     path = directory / f"{persona_id}.json"
     if not path.exists():
         raise FileNotFoundError(f"persona '{persona_id}' not found at {path}")

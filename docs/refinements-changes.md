@@ -5,6 +5,23 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-06-18 — Onboarding screens, pause menu, and grouped/colour-coded action panel
+
+**Tag:** `feature`, `ui`, `ux`
+**Source:** user requests — add a pre-play briefing + illustrated help, prompt to save when leaving, make the action buttons easier to read, and fold similar buttons together. AI-assisted (Cursor).
+
+- **New `src/game/info_screens.py`** with two reusable, self-contained screens drawn straight onto the active display:
+  - **`show_briefing`** — shown after New Game / Continue and before play starts: a description of the game plus **Begin / Help / Back to menu**.
+  - **`show_help_screen`** — a two-page illustrated guide. Page 1 explains the loop with a live, **labelled diagram of the screen** (status bar, customer, action buttons, conversation/input); page 2 is a **labelled action-panel reference**. Drawn with pygame primitives so it always matches the real UI (no screenshot files to maintain).
+- **Help everywhere:** the main menu gained a **Help** button (and **F1**); the in-game **Help** action and **F1** now open the same illustrated guide instead of dumping text into the chat box.
+- **Pause menu (`src/game/pause_menu.py`):** **Esc** opens Resume / Apply size / **Main Menu** / **Quit**. Main Menu and Quit first ask whether to **save** (Save & quit / Quit without saving / Cancel), so progress is never lost by accident. `main()` now loops so returning to the menu reopens the launcher.
+- **Corner hint** moved to sit just above the conversation box so it isn't clipped by the border.
+- **Colour-coded action buttons:** `ACTION_BUTTON_COLORS` + `action_button_color()` in `ui.py` tint buttons by category (commerce amber, quests blue, gossip violet, flow teal, travel green, save green, help slate); hover/disabled tones derived via `shift_color`.
+- **Grouped action panel:** similar actions fold into one "main" button — **Trade**, **Quests**, **Menu** (and **Go back** in locations). Clicking expands the members in place with a **Back** button (`_action_group` state + `_open_action_group` / `_close_action_group`), resetting on every mode change.
+- **Drawn arrows, not glyphs:** group/back buttons use a real triangle drawn by `ui.draw_arrow` (Button gained an optional `arrow` field) instead of Unicode triangles, which rendered as empty boxes in the bundled font.
+
+---
+
 ## 2026-05-12 — Haggle: stop “settled price” loops (history counter + handshake)
 
 **Tag:** `feature`, `prompt`, `economy`

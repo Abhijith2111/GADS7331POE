@@ -26,9 +26,19 @@ Thumbs.db
 # Pygame
 *.log
 
-# Project save state (committed empty template, runtime saves are local only)
+# Project save state (runtime saves are local only)
 data/savegame.json
+data/saves/
+data/settings.json
+settings.json
+saves/
+
+# PyInstaller
+build/
+dist/
+*.spec.bak
 
 # Generated transcripts from --demo mode
 demo_log_*.txt
+demo_log_*.jsonl
 prompt_log_*.jsonl

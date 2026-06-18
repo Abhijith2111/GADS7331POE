@@ -232,13 +232,17 @@ ONLY a JSON object matching this schema, no prose, no markdown fences:
 }
 
 Rules:
-- The rumour is ABOUT YOU. Decide based on how much it might damage you.
+- The rumour is ABOUT YOU. The keeper is trying to sell you dirt on yourself.
+  This is insulting. Your "line" should be an angry outburst — yelling,
+  disgust, threats, or wounded pride — not polite banter.
 - Never accept above your coin purse.
 - Counter-offers must be a whole number of gold, >= 1.
 - If you accept, set counter_offer to null and agreed_price to what you pay
   (or null if you pay the keeper's listed price exactly).
-- If the rumour reveals your secret or names you directly, value it more.
-- If the rumour is vague or harmless, walk away (set walk_away=true).
+- If the rumour reveals your secret or names you directly, you may still pay
+  to learn what is being said — but stay furious while you do.
+- If the rumour is vague or harmless, walk away (set walk_away=true) and
+  storm off in your line.
 - Stay strictly in character; reflect your voice and your starting attitude.
 - The keeper is selling YOU on YOU; do not pretend the rumour is about
   someone else.
@@ -324,6 +328,59 @@ def build_gossip_intel_messages(
     )
     user = (
         f"The keeper offers this intelligence about {subject_names} for "
+        f"{offered_price} gold. Decide: pay, counter-offer, or walk "
+        "away. Reply ONLY with JSON."
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
+
+
+GOSSIP_TELL_RULES = """The tavern keeper is offering to sell you a piece
+of tavern gossip or rumour they claim to have overheard — general chatter
+that does not name you and may not name anyone you care about. You are
+deciding whether the asking price is worth hearing it. Reply with ONLY a
+JSON object matching this schema, no prose, no markdown fences:
+
+{
+  "accept": boolean,
+  "counter_offer": integer|null,
+  "line": string,
+  "walk_away": boolean,
+  "agreed_price": integer|null // if accept: exact gold you pay (null = keeper's ask)
+}
+
+Rules:
+- Never accept above your coin purse; never counter above your purse.
+- If you accept, set counter_offer to null and agreed_price to what you pay
+  (or null if you pay the keeper's listed price exactly).
+- Pay if the rumour sounds juicy, useful to your goals, or entertaining.
+  Walk away if it sounds dull, irrelevant, or like tavern noise.
+- Stay strictly in character.
+- The rumour is general bar chatter — not specifically about you unless
+  your name happens to appear in the text.
+"""
+
+
+def build_gossip_tell_messages(
+    persona: dict[str, Any],
+    world_state: dict[str, Any],
+    rumour_text: str,
+    offered_price: int,
+) -> list[dict[str, str]]:
+    """JSON-mode prompt: sell generic tavern gossip to the current customer."""
+    system = (
+        f"{GOSSIP_TELL_RULES}\n"
+        f"--- Persona ---\n{_persona_card(persona)}\n\n"
+        f"--- World state ---\n{_world_state_block(world_state)}\n\n"
+        f"--- The rumour (as the keeper would tell it) ---\n"
+        f"\"{rumour_text}\"\n\n"
+        f"--- Your coin purse ---\n"
+        f"You can pay at most {persona['budget_gold']} gold.\n"
+    )
+    user = (
+        f"The keeper offers this piece of tavern gossip for "
         f"{offered_price} gold. Decide: pay, counter-offer, or walk "
         "away. Reply ONLY with JSON."
     )

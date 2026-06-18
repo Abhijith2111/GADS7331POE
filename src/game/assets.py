@@ -21,13 +21,14 @@ from typing import Any  # noqa: F401 — used by SoundLibrary cache type hint
 
 import pygame
 
+from .paths import assets_dir, bundled_music_dir, user_music_dir
 
-SPRITE_DIR = Path("assets") / "sprites"
-FONT_DIR = Path("assets") / "fonts"
-SFX_DIR = Path("assets") / "sfx"
-MUSIC_DIR = Path("assets") / "music"
-# Optional project-root folder for user-supplied BGM (not necessarily in git).
-USER_MUSIC_DIR = Path("Music")
+SPRITE_DIR = assets_dir() / "sprites"
+FONT_DIR = assets_dir() / "fonts"
+SFX_DIR = assets_dir() / "sfx"
+MUSIC_DIR = assets_dir() / "music"
+USER_MUSIC_DIR = user_music_dir()
+_BUNDLED_MUSIC_DIR = bundled_music_dir()
 
 NPC_SIZE = (220, 320)
 
@@ -194,14 +195,21 @@ class MusicPlayer:
                 if hits:
                     self._track_path = hits[0]
                     return hits[0]
-        # 2. assets/music/
+        # 2. Bundled project-root Music/ (shipped with the game).
+        if _BUNDLED_MUSIC_DIR.is_dir():
+            for ext in (".ogg", ".wav", ".mp3"):
+                hits = sorted(_BUNDLED_MUSIC_DIR.glob(f"*{ext}"))
+                if hits:
+                    self._track_path = hits[0]
+                    return hits[0]
+        # 3. assets/music/
         if MUSIC_DIR.is_dir():
             for ext in (".ogg", ".wav", ".mp3"):
                 hits = sorted(MUSIC_DIR.glob(f"*{ext}"))
                 if hits:
                     self._track_path = hits[0]
                     return hits[0]
-        # 3. Generate the procedural pad into a temp WAV.
+        # 4. Generate the procedural pad into a temp WAV.
         try:
             data = _generate_ambient_wav()
         except Exception:

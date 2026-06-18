@@ -27,7 +27,11 @@ from typing import Any
 import pygame
 
 from src.game.assets import MusicPlayer, SoundLibrary, load_font
-from src.game.main_menu import MainMenu
+from src.game.info_screens import show_briefing, show_help_screen
+from src.game.main_menu import MainMenu, MenuResult
+from src.game.paths import items_path
+from src.game.save_slots import create_new_slot, load_slot
+from src.game.settings import GameSettings
 from src.game.market import MARKET_OFFERS
 from src.game.npc import (
     NPC,
@@ -76,7 +80,7 @@ from src.llm.parsers import (
 # Default matches first main-menu preset (Full HD).
 DEFAULT_SCREEN_SIZE: tuple[int, int] = (1920, 1080)
 TITLE = "The Tavern Master"
-ITEMS_PATH = Path("data") / "items.json"
+ITEMS_PATH = items_path()
 
 # Resizable: lets the OS maximize when the player snaps the window to the
 # top of the screen (Windows / some WMs). ``VIDEORESIZE`` reflows the UI.
@@ -125,7 +129,7 @@ class GossipSellResultEvent:
     rumour_text: str
     offered_price: int
     ok: bool
-    rumour_kind: str = "about_self"  # about_self | about_other
+    rumour_kind: str = "about_self"  # about_self | about_other | generic
 
 
 @dataclass
@@ -194,6 +198,9 @@ class Game:
         args: argparse.Namespace,
         *,
         screen_size: tuple[int, int] | None = None,
+        save_slot: int = 1,
+        new_game: bool = False,
+        music_volume: float | None = None,
     ) -> None:
         pygame.init()
         pygame.display.set_caption(TITLE)
@@ -205,20 +212,28 @@ class Game:
         self.demo_mode = args.demo
         self.demo_turns = args.turns
         self.demo_persona = args.persona
+        self.save_slot = save_slot
 
-        self.world = WorldState.load()
+        if new_game:
+            self.world = create_new_slot(save_slot)
+        else:
+            self.world = load_slot(save_slot)
         self.scene = TavernScene(self.screen_size)
         self.sfx = SoundLibrary()
         # Background music: procedural ambient pad by default, overridable
         # by any file in assets/music/. Off automatically in --demo mode
         # so the captured video doesn't fight the dialogue audio.
         self.music = MusicPlayer()
+        self.settings = GameSettings.load()
+        vol = music_volume if music_volume is not None else self.settings.music_volume
+        self.music.set_volume(vol)
         if not self.demo_mode:
             self.music.start()
 
+        model = args.model if args.model is not None else self.settings.ollama_model
         self.client = OllamaClient(
             OllamaConfig(
-                model=args.model,
+                model=model,
                 seed=args.seed if args.seed is not None else (1234 if args.demo else None),
             )
         )
@@ -239,15 +254,20 @@ class Game:
         self._pending_found_quest: dict[str, Any] | None = None
         # Schedule auto-return to tavern after a successful quest.
         self._return_to_tavern_at: float | None = None
+        # Schedule customer departure after an angry rumour sell.
+        self._next_customer_at: float | None = None
         # Per-(location, hotspot) wrong-click counter, drives escalating
         # satire on repeat clicks. Reset on every fresh location entry.
         self._wrong_click_counts: dict[tuple[str, str], int] = {}
         # Set by the Ollama auto-connect worker once the daemon, model,
-        # and warmup are all done. Mostly informational.
+        # and warmup are all done.
         self._ollama_ready: bool = False
 
         self.paused: bool = False
         self._pause_menu = PauseMenu()
+
+        # Name of the currently expanded action-panel group, or None at root.
+        self._action_group: str | None = None
 
         # UI layout (rebuilt on window resize).
         self._build_ui_layout()
@@ -407,7 +427,6 @@ class Game:
         model = self.client.config.model
         emit("Checking Ollama...", "info")
 
-        # 1. Make sure the daemon is reachable (start it if we can).
         if not self.client.ensure_daemon(on_status=lambda m: emit(m, "info")):
             emit(
                 "Ollama is not available. The game will still run but "
@@ -416,7 +435,6 @@ class Game:
             )
             return
 
-        # 2. Make sure the configured model is on disk; pull it if not.
         if not self.client.has_model(model):
             emit(f"Downloading {model} (first launch only)...", "info")
             ok = self.client.pull_model(
@@ -430,11 +448,13 @@ class Game:
                 )
                 return
 
-        # 3. Warm the model so the first chat is snappy.
         emit(f"Warming up {model}...", "info")
         self.client.warmup()
         emit(f"Ollama ready ({model}).", "good")
         self.event_q.put(_OllamaReadyMarker())
+
+    def _ollama_status_label(self) -> str:
+        return "ready" if self._ollama_ready else "offline"
 
     def _on_ollama_status(self, ev: "OllamaStatusEvent") -> None:
         color = {"good": GOOD, "warn": WARN}.get(ev.kind, HIGHLIGHT)
@@ -487,33 +507,15 @@ class Game:
             self.toasts.push(f"Unknown command: {cmd}. Try /help.", WARN)
 
     def _show_help(self) -> None:
-        self.dialogue.add(
-            "system",
-            "How to play:\n"
-            "  - Type a message and press Enter to talk to the customer.\n"
-            "  - Use the buttons on the right for actions:\n"
-            "      Show stock     - the bar's menu and prices\n"
-            "      Sell item...   - pick an item, set a price, and haggle\n"
-            "      Ask for work   - see if the customer has a quest\n"
-            "      View quests    - your active and completed quests\n"
-            "      View gossip    - rumours you've overheard. Named patrons\n"
-            "                       get **Sell re: you** if the line is about\n"
-            "                       them, **Sell intel** if it's about someone\n"
-            "                       else at the bar, and **Spread** to plant\n"
-            "                       the rumour for free (+townsfolk).\n"
-            "      Next customer  - send this one away, bring in the next\n"
-            "      Save game      - persist the world state to disk\n"
-            "  - Leaving the bar: use 'Leave the bar', then pick a region or\n"
-            "    Wholesale Row on the map to buy bulk tavern supplies.\n"
-            "    In other regions, click the glowing hotspot when on\n"
-            "    a quest to find the item. Wrong clicks just\n"
-            "    print 'Nothing useful here.' and cost you nothing.\n"
-            "  - Hot-keys: F1 help, F2 settings, F5 next customer, T toggles\n"
-            "    the AI banner, M mutes/unmutes background music, Esc opens the\n"
-            "    pause menu (change aspect ratio or quit from there).\n"
-            "  - Power users can still type slash commands like\n"
-            "    /sell strong_stout 5 directly into the input bar.",
-        )
+        """Open the visual help guide (also bound to F1)."""
+        if show_help_screen(self.clock) == "quit":
+            pygame.event.post(pygame.event.Event(pygame.QUIT))
+        surf = pygame.display.get_surface()
+        if surf is not None and surf.get_size() != self.screen_size:
+            # The help screen lets the player resize the window; reflow.
+            self._apply_window_dimensions(*surf.get_size(), reset_flows=False)
+        elif surf is not None:
+            self.screen = surf
 
     # ------------------------------------------------------------------
     # Action-panel handlers
@@ -716,21 +718,20 @@ class Game:
         self.modal.show("Quest Journal", body, [close])
 
     def _show_gossip_modal(self) -> None:
-        """Modal listing every rumour the keeper has overheard.
+        """Modal listing overheard rumours and keeper memory.
 
-        For each line we detect which patrons (from ``self.personas``)
-        are named. When someone is at the bar:
-
-        - If the rumour is **about them**, ``Sell re: you`` starts the
-          original buy-your-own-rumour haggle.
-        - If it names **other** patrons, ``Sell intel`` haggles over
-          third-party gossip and ``Spread`` tells them for free while
-          adding a derived rumour so it propagates through town.
+        Overheard lines must be **Remember**-ed before they can be sold.
+        Memorised lines can be **Offer rumour** to the seated customer
+        (any line) or **Spread** when they name other patrons.
         """
-        if not self.world.gossip_heard:
+        pending = list(reversed(self.world.rumours_pending))
+        memory = list(reversed(self.world.rumour_memory))
+        if not pending and not memory:
             body = (
                 "No gossip has reached your ear yet.\n\n"
-                "Keep chatting; customers drop rumours when they get talking."
+                "Keep chatting; customers drop rumours when they get talking. "
+                "When you overhear one, open this journal and **Remember** it "
+                "before you can sell it on."
             )
             modal_rect = self.modal.rect
             close = Button(
@@ -738,23 +739,17 @@ class Game:
                 pygame.Rect(modal_rect.right - 140, modal_rect.bottom - 56, 120, 38),
                 self.modal.hide,
             )
-            self.modal.show("Gossip Heard", body, [close])
+            self.modal.show("Gossip", body, [close])
             return
-
-        recent = list(reversed(self.world.gossip_heard))
-        max_visible = 8
-        shown = recent[:max_visible]
-        hidden = len(recent) - len(shown)
 
         modal = self.modal
         modal_rect = modal.rect
         npc = self.current_npc
+        max_visible = 6
 
         right_slot_w = 220
         small_h = 26
-        # Text starts at rect.left + 20; keep a gap before the action column.
         text_max_width = max(80, modal_rect.width - 40 - right_slot_w - 8)
-        # Footer lines span the full body (no per-row action column there).
         footer_max_width = max(80, modal_rect.width - 40)
 
         body_top = (
@@ -770,87 +765,121 @@ class Game:
         y = body_top
         bx = modal_rect.right - 20 - right_slot_w
 
-        for gossip in shown:
+        def _append_section(title: str) -> None:
+            nonlocal y
+            body_lines.append(title)
+            y += line_h
+
+        def _append_rumour_row(
+            gossip: str,
+            *,
+            remember: bool = False,
+            offer: bool = False,
+            spread: bool = False,
+        ) -> None:
+            nonlocal y
             wrapped = wrap_text(f"- {gossip}", modal.body_font, text_max_width)
             row_top = y
             for line in wrapped:
                 body_lines.append(line)
                 y += line_h
 
-            mentioned = personas_mentioned_in_text(gossip, self.personas)
-            if npc is not None and not self.streaming:
-                self_hit = any(p["id"] == npc.id for p in mentioned)
-                others = [p for p in mentioned if p["id"] != npc.id]
-                subject_label = ", ".join(str(p["name"]) for p in others)
-
-                btn_y = row_top
-                if self_hit:
-                    short = npc.name.split()[0]
+            btn_y = row_top
+            if remember:
+                buttons.append(
+                    Button(
+                        "Remember",
+                        pygame.Rect(bx, btn_y, right_slot_w, small_h),
+                        on_click=lambda g=gossip: self._remember_rumour(g),
+                    )
+                )
+            elif offer or spread:
+                if offer:
                     buttons.append(
                         Button(
-                            f"Sell re: {short}",
+                            "Offer rumour",
                             pygame.Rect(bx, btn_y, right_slot_w, small_h),
-                            on_click=(
-                                lambda g=gossip: self._open_gossip_sell_price(
-                                    g, "about_self", ""
-                                )
-                            ),
+                            on_click=lambda g=gossip: self._open_gossip_offer(g),
                         )
                     )
                     btn_y += small_h + 4
-                if others:
-                    half = (right_slot_w - 6) // 2
-                    buttons.append(
-                        Button(
-                            "Sell intel",
-                            pygame.Rect(bx, btn_y, half, small_h),
-                            on_click=(
-                                lambda g=gossip, sl=subject_label: self._open_gossip_sell_price(
-                                    g, "about_other", sl
-                                )
-                            ),
-                        )
-                    )
+                if spread:
                     buttons.append(
                         Button(
                             "Spread",
-                            pygame.Rect(
-                                bx + half + 6, btn_y, half, small_h
-                            ),
-                            on_click=(
-                                lambda g=gossip: self._spread_gossip_free(g)
-                            ),
+                            pygame.Rect(bx, btn_y, right_slot_w, small_h),
+                            on_click=lambda g=gossip: self._spread_gossip_free(g),
                         )
                     )
 
             body_lines.append("")
             y += line_h
 
-        if hidden > 0:
-            body_lines.extend(
-                wrap_text(
-                    f"({hidden} older rumour(s) not shown.)",
-                    modal.body_font,
-                    footer_max_width,
+        if pending:
+            _append_section("Overheard (not memorised):")
+            shown_pending = pending[:max_visible]
+            for gossip in shown_pending:
+                _append_rumour_row(gossip, remember=True)
+            hidden_pending = len(pending) - len(shown_pending)
+            if hidden_pending > 0:
+                body_lines.extend(
+                    wrap_text(
+                        f"({hidden_pending} older overheard rumour(s) not shown.)",
+                        modal.body_font,
+                        footer_max_width,
+                    )
                 )
-            )
+                y += line_h * len(
+                    wrap_text(
+                        f"({hidden_pending} older overheard rumour(s) not shown.)",
+                        modal.body_font,
+                        footer_max_width,
+                    )
+                )
+
+        if memory:
+            if pending:
+                body_lines.append("")
+                y += line_h
+            _append_section("Your memory:")
+            shown_memory = memory[:max_visible]
+            for gossip in shown_memory:
+                mentioned = personas_mentioned_in_text(gossip, self.personas)
+                others = (
+                    [p for p in mentioned if npc is not None and p["id"] != npc.id]
+                    if npc is not None
+                    else []
+                )
+                can_act = npc is not None and not self.streaming
+                _append_rumour_row(
+                    gossip,
+                    offer=can_act,
+                    spread=can_act and bool(others),
+                )
+            hidden_memory = len(memory) - len(shown_memory)
+            if hidden_memory > 0:
+                body_lines.extend(
+                    wrap_text(
+                        f"({hidden_memory} older memorised rumour(s) not shown.)",
+                        modal.body_font,
+                        footer_max_width,
+                    )
+                )
+
+        body_lines.append("")
         if npc is None:
-            body_lines.append("")
             body_lines.extend(
                 wrap_text(
-                    "(Seat a customer to sell them gossip or spread rumours.)",
+                    "(Seat a customer to offer memorised rumours or spread gossip.)",
                     modal.body_font,
                     footer_max_width,
                 )
             )
-        elif not any(
-            personas_mentioned_in_text(g, self.personas) for g in shown
-        ):
-            body_lines.append("")
+        else:
             body_lines.extend(
                 wrap_text(
-                    "(These lines don't name anyone in your regulars yet — "
-                    "keep chatting for juicier tips.)",
+                    "(Offering dirt about the seated customer may make them leave "
+                    "angrily. Hearing the same rumour again does nothing.)",
                     modal.body_font,
                     footer_max_width,
                 )
@@ -866,10 +895,39 @@ class Game:
             )
         )
 
-        modal.title = "Gossip Heard"
+        modal.title = "Gossip"
         modal.body_lines = body_lines
         modal.buttons = buttons
         modal.visible = True
+
+    def _remember_rumour(self, gossip_text: str) -> None:
+        if self.world.commit_rumour_to_memory(gossip_text):
+            self.world.save()
+            self.toasts.push("Rumour committed to memory.", GOOD)
+            self._show_gossip_modal()
+        else:
+            self.toasts.push("That rumour is already in memory.", WARN)
+
+    def _resolve_rumour_offer_kind(
+        self, gossip_text: str
+    ) -> tuple[str, str]:
+        """Pick gossip-buy, intel, or generic prompt for an offer."""
+        if self.current_npc is None:
+            return "generic", ""
+        mentioned = personas_mentioned_in_text(gossip_text, self.personas)
+        self_hit = any(p["id"] == self.current_npc.id for p in mentioned)
+        others = [p for p in mentioned if p["id"] != self.current_npc.id]
+        if self_hit:
+            return "about_self", ""
+        if others:
+            subject_label = ", ".join(str(p["name"]) for p in others)
+            return "about_other", subject_label
+        return "generic", ""
+
+    def _open_gossip_offer(self, gossip_text: str) -> None:
+        """Open the price modal for any memorised rumour."""
+        kind, subject_label = self._resolve_rumour_offer_kind(gossip_text)
+        self._open_gossip_sell_price(gossip_text, kind, subject_label)
 
     # ------------------------------------------------------------------
     # Sell-a-rumour flow (gossip the keeper has overheard about the NPC)
@@ -895,11 +953,10 @@ class Game:
                 WARN,
             )
             return
-        try:
-            self.world.gossip_heard.remove(gossip_text)
-        except ValueError:
-            self.toasts.push("That rumour is already gone.", WARN)
+        if gossip_text not in self.world.rumour_memory:
+            self.toasts.push("That rumour is not in your memory.", WARN)
             return
+        self.world.remove_from_memory(gossip_text)
 
         buyer = self.current_npc
         names = ", ".join(str(p["name"]) for p in others)
@@ -935,6 +992,9 @@ class Game:
         if kind == "about_other" and not subject_label.strip():
             self.toasts.push("No named subject for that intel.", WARN)
             return
+        if gossip_text not in self.world.rumour_memory:
+            self.toasts.push("Remember that rumour before offering it.", WARN)
+            return
         self._gossip_sell_text = gossip_text
         self._gossip_sell_kind = kind
         self._gossip_subject_label = subject_label.strip()
@@ -955,12 +1015,20 @@ class Game:
                 f"Rumour: \"{rumour}\"\n\n"
                 f"Your asking price: {offer} gold"
             )
+        elif self._gossip_sell_kind == "generic":
+            body = (
+                f"You offer {self.current_npc.name} a piece of tavern gossip "
+                f"you've memorised, for a price.\n\n"
+                f"Rumour: \"{rumour}\"\n\n"
+                f"Your asking price: {offer} gold"
+            )
         else:
             body = (
                 f"You hint to {self.current_npc.name} that you've heard a "
                 "rumour about them, and offer to share it for a price.\n\n"
                 f"Rumour: \"{rumour}\"\n\n"
-                f"Your asking price: {offer} gold"
+                f"Your asking price: {offer} gold\n\n"
+                "(They may storm out angrily whether they pay or refuse.)"
             )
 
         step_y = modal_rect.bottom - 130
@@ -1078,6 +1146,13 @@ class Game:
                 rumour_text,
                 offered_price,
             )
+        elif kind == "generic":
+            messages = P.build_gossip_tell_messages(
+                npc.persona,
+                self.world.to_prompt_dict(),
+                rumour_text,
+                offered_price,
+            )
         else:
             messages = P.build_gossip_buy_messages(
                 npc.persona,
@@ -1130,15 +1205,16 @@ class Game:
         self.text_input.set_active(True)
         decision = ev.decision
         self.dialogue.add(self.current_npc.name, decision.line)
+        storm_out = False
         if decision.accept:
             self.world.add_gold(decision.sale_gold)
             if ev.rumour_kind == "about_self":
                 self.world.adjust_reputation("townsfolk", -1)
                 rep_tail = " (-1 townsfolk)"
+                storm_out = True
             else:
                 rep_tail = ""
-            if ev.rumour_text in self.world.gossip_heard:
-                self.world.gossip_heard.remove(ev.rumour_text)
+            self.world.remove_from_memory(ev.rumour_text)
             self.world.save()
             self.sfx.play("coin")
             self.toasts.push(
@@ -1146,18 +1222,32 @@ class Game:
                 GOOD,
             )
         elif decision.walk_away:
-            self.toasts.push(
-                f"{self.current_npc.name} isn't biting on that rumour.",
-                WARN,
-            )
+            if ev.rumour_kind == "about_self":
+                storm_out = True
+                self.toasts.push(
+                    f"{self.current_npc.name} storms off without paying.",
+                    WARN,
+                )
+            else:
+                self.toasts.push(
+                    f"{self.current_npc.name} isn't biting on that rumour.",
+                    WARN,
+                )
         elif decision.counter_offer is not None:
             self.toasts.push(
                 f"Counter-offer: {decision.counter_offer}g. Re-open the "
                 "Gossip list to accept or push back.",
                 HIGHLIGHT,
             )
+        if storm_out and self.current_npc is not None:
+            name = self.current_npc.name
+            self._next_customer_at = time.monotonic() + 1.6
+            self.toasts.push(f"{name} storms out of the tavern.", WARN)
         if not ev.ok:
-            self.toasts.push("(rumour-sell response degraded)", WARN)
+            self.toasts.push(
+                "Rumour reply unclear — try again or press F2 → Re-check Ollama.",
+                WARN,
+            )
 
     def _open_sell_picker(self) -> None:
         """Stage 1 of the sell flow: pick which item to offer."""
@@ -1369,7 +1459,9 @@ class Game:
         )
         try:
             decision, ok = call_with_retry(
-                lambda: self.client.json_call(messages, schema_hint="HaggleDecision"),
+                lambda: self.client.json_call(
+                    messages, schema_hint="HaggleDecision"
+                ),
                 lambda raw: parse_haggle(
                     raw,
                     offered_price=offered_price,
@@ -1408,7 +1500,9 @@ class Game:
         )
         try:
             quest, ok = call_with_retry(
-                lambda: self.client.json_call(messages, schema_hint="Quest"),
+                lambda: self.client.json_call(
+                    messages, schema_hint="Quest"
+                ),
                 parse_quest,
                 fallback=DEGRADED_QUEST,
             )
@@ -1432,47 +1526,95 @@ class Game:
     def _refresh_action_buttons(self) -> None:
         """Rebuild the side action buttons for the current mode.
 
-        Called whenever the mode changes or the active-quest list
-        changes so the player only ever sees buttons that make sense
-        right now (bar-only vs exploration).
+        Similar actions are folded into a single "main" button (e.g.
+        ``Trade``, ``Quests``, ``Menu``). Clicking one expands its members
+        in place with a ``Back`` button, so the panel never blends into one
+        long wall of look-alike buttons. Called whenever the mode changes,
+        a submenu opens/closes, or the active-quest list changes.
         """
+        # Per-mode menu tree: groups (folded) plus the root layout, where
+        # each root entry is either ("group", name) or ("leaf", (label, cb)).
         if self.mode == MODE_TAVERN:
-            buttons = [
-                ("Show stock", self._show_stock_modal),
-                ("Sell item...", self._open_sell_picker),
-                ("Ask for work", self._request_quest),
-                ("View quests", self._show_quests_modal),
-                ("View gossip", self._show_gossip_modal),
-                ("Next customer", self._next_customer),
-                ("Save game", self._save_game),
-                ("Leave the bar", self._enter_world_map),
-                ("Help", self._show_help),
-            ]
-        elif self.mode == MODE_WORLD_MAP:
-            buttons = [
-                ("Back to bar", self._return_to_tavern),
-                ("Save game", self._save_game),
-                ("Help", self._show_help),
-            ]
-        else:  # MODE_LOCATION
-            buttons = [
-                ("Back to map", self._enter_world_map),
-                ("Back to bar", self._return_to_tavern),
-            ]
-            if self.current_location_id == WHOLESALE_MARKET_ID:
-                buttons.append(("Browse stalls", self._show_market_modal))
-            buttons.extend(
-                [
+            groups: dict[str, list[tuple[str, Any]]] = {
+                "Trade": [
+                    ("Show stock", self._show_stock_modal),
+                    ("Sell item...", self._open_sell_picker),
+                ],
+                "Quests": [
+                    ("Ask for work", self._request_quest),
+                    ("View quests", self._show_quests_modal),
+                ],
+                "Menu": [
                     ("Save game", self._save_game),
                     ("Help", self._show_help),
-                ]
-            )
+                ],
+            }
+            root: list[tuple[str, Any]] = [
+                ("group", "Trade"),
+                ("group", "Quests"),
+                ("leaf", ("View gossip", self._show_gossip_modal)),
+                ("leaf", ("Next customer", self._next_customer)),
+                ("leaf", ("Leave the bar", self._enter_world_map)),
+                ("group", "Menu"),
+            ]
+        elif self.mode == MODE_WORLD_MAP:
+            groups = {
+                "Menu": [
+                    ("Save game", self._save_game),
+                    ("Help", self._show_help),
+                ],
+            }
+            root = [
+                ("leaf", ("Back to bar", self._return_to_tavern)),
+                ("group", "Menu"),
+            ]
+        else:  # MODE_LOCATION
+            groups = {
+                "Go back": [
+                    ("Back to map", self._enter_world_map),
+                    ("Back to bar", self._return_to_tavern),
+                ],
+                "Menu": [
+                    ("Save game", self._save_game),
+                    ("Help", self._show_help),
+                ],
+            }
+            root = [("group", "Go back")]
+            if self.current_location_id == WHOLESALE_MARKET_ID:
+                root.append(("leaf", ("Browse stalls", self._show_market_modal)))
+            root.append(("group", "Menu"))
+
+        if self._action_group in groups:
+            buttons: list[tuple] = [
+                ("Back", self._close_action_group, "left")
+            ]
+            buttons.extend(groups[self._action_group])
+        else:
+            self._action_group = None
+            buttons = []
+            for kind, payload in root:
+                if kind == "group":
+                    name = payload
+                    buttons.append(
+                        (name, lambda n=name: self._open_action_group(n), "right")
+                    )
+                else:
+                    buttons.append(payload)
         self.actions.set_buttons(buttons)
+
+    def _open_action_group(self, name: str) -> None:
+        self._action_group = name
+        self._refresh_action_buttons()
+
+    def _close_action_group(self) -> None:
+        self._action_group = None
+        self._refresh_action_buttons()
 
     def _enter_world_map(self) -> None:
         if self.streaming or self.modal.visible:
             return
         self.mode = MODE_WORLD_MAP
+        self._action_group = None
         self.text_input.set_active(False)
         self.world_map_scene.set_active_locations(self.world.active_location_ids())
         self._refresh_action_buttons()
@@ -1482,6 +1624,7 @@ class Game:
         if self.streaming or self.modal.visible:
             return
         self.mode = MODE_LOCATION
+        self._action_group = None
         self.current_location_id = location_id
         self.location_scene.set_location(location_id)
         self.location_scene.set_quests(self.world.quests_at(location_id))
@@ -1498,6 +1641,7 @@ class Game:
             return
         self.mode = MODE_TAVERN
         self.current_location_id = None
+        self._action_group = None
         if self.current_npc is not None and not self.modal.visible:
             self.text_input.set_active(True)
         self._refresh_action_buttons()
@@ -1539,7 +1683,7 @@ class Game:
                 self.streaming = False
                 if self.mode == MODE_TAVERN:
                     self.text_input.set_active(True)
-                self.toasts.push(f"LLM error: {ev.message}", WARN)
+                self.toasts.push(ev.message, WARN)
                 self._pending_found_quest = None
                 if self.demo_mode:
                     self._demo_step_pending = False
@@ -1583,7 +1727,10 @@ class Game:
                 HIGHLIGHT,
             )
         if not ev.ok:
-            self.toasts.push("(haggle response degraded)", WARN)
+            self.toasts.push(
+                "Haggle reply unclear — try again or press F2 → Re-check Ollama.",
+                WARN,
+            )
 
     def _on_quest_result(self, ev: QuestResultEvent) -> None:
         assert self.current_npc is not None
@@ -1614,7 +1761,10 @@ class Game:
         self.toasts.push(f"New quest: {q.title}", HIGHLIGHT)
         self._refresh_action_buttons()
         if not ev.ok:
-            self.toasts.push("(quest response degraded)", WARN)
+            self.toasts.push(
+                "Quest reply unclear — try again or press F2 → Re-check Ollama.",
+                WARN,
+            )
 
     def _on_found_result(self, ev: FoundResultEvent) -> None:
         """Resolve the found-it micro-call: deposit reward, set up return."""
@@ -1640,7 +1790,10 @@ class Game:
                 GOOD,
             )
         if not ev.ok:
-            self.toasts.push("(found-line degraded)", WARN)
+            self.toasts.push(
+                "Found-it reply unclear — try again or press F2 → Re-check Ollama.",
+                WARN,
+            )
         # Brief celebration pause, then auto-return to the bar.
         self._return_to_tavern_at = time.monotonic() + 1.6
         self._refresh_action_buttons()
@@ -1653,8 +1806,9 @@ class Game:
 
         We do not run another LLM call to mine gossip — that would double
         latency for every line. Instead we look for sentences that
-        mention rumour-y phrases. False positives are fine; the gossip
-        list is capped and surfaced back to later NPCs as flavour.
+        mention rumour-y phrases. New lines land in the overheard queue;
+        the keeper must remember them before selling. Duplicates are
+        silently ignored.
         """
         triggers = ("rumour", "rumor", "they say", "i heard", "word is", "word has it")
         lowered = text.lower()
@@ -1662,8 +1816,13 @@ class Game:
             for sentence in text.split("."):
                 s = sentence.strip()
                 if 8 < len(s) < 180 and any(t in s.lower() for t in triggers):
-                    if self.world.add_gossip(s):
-                        self.toasts.push(f"Gossip noted: {s[:60]}...", HIGHLIGHT)
+                    if self.world.is_known_rumour(s):
+                        return
+                    if self.world.add_rumour_overheard(s):
+                        self.toasts.push(
+                            "Rumour overheard — open Gossip to remember it.",
+                            HIGHLIGHT,
+                        )
                         self.world.save()
                     break
 
@@ -1706,12 +1865,22 @@ class Game:
                 enabled=regen_enabled,
             ),
             Button(
+                "Re-check Ollama",
+                pygame.Rect(bx + 230, by2, 160, bh),
+                self._recheck_ollama,
+            ),
+            Button(
                 "Close",
                 pygame.Rect(modal_rect.right - bw - 20, by2, bw, bh),
                 self.modal.hide,
             ),
         ]
         self.modal.show("Settings", body, buttons)
+
+    def _recheck_ollama(self) -> None:
+        self.modal.hide()
+        self.toasts.push("Re-checking Ollama...", HIGHLIGHT)
+        self._check_ollama()
 
     def _cycle_model(self) -> None:
         models = self.client.list_models() or [self.client.config.model]
@@ -1720,6 +1889,8 @@ class Game:
             self.client.config.model = models[(i + 1) % len(models)]
         else:
             self.client.config.model = models[0]
+        self.settings.ollama_model = self.client.config.model
+        self.settings.save()
         self.toasts.push(f"Model: {self.client.config.model}", HIGHLIGHT)
         self._open_settings()
 
@@ -1927,7 +2098,9 @@ class Game:
         )
         try:
             found, ok = call_with_retry(
-                lambda: self.client.json_call(messages, schema_hint="FoundLine"),
+                lambda: self.client.json_call(
+                    messages, schema_hint="FoundLine"
+                ),
                 parse_found_line,
                 fallback=DEGRADED_FOUND,
             )
@@ -1942,14 +2115,18 @@ class Game:
     # ------------------------------------------------------------------
     # Main loop
     # ------------------------------------------------------------------
-    def run(self) -> int:
+    def run(self) -> str:
         self._check_ollama()
         running = True
+        exit_mode = "quit"
+        save_on_exit = True
         while running:
             dt = self.clock.tick(60) / 1000.0
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                    exit_mode = "quit"
+                    save_on_exit = True
                     continue
                 if event.type == pygame.VIDEORESIZE:
                     self._apply_window_dimensions(event.w, event.h, reset_flows=False)
@@ -1960,14 +2137,16 @@ class Game:
                     act = self._pause_menu.handle_event(event)
                     if act == "resume":
                         self.paused = False
-                    elif act == "quit":
-                        running = False
                     elif act == "apply":
                         nw, nh = self._pause_menu.selected_size()
                         if (nw, nh) != self.screen_size:
                             self._relayout_after_resize(nw, nh)
                         else:
                             self.toasts.push("Already using this size.", HIGHLIGHT)
+                    elif act in ("save_quit", "quit_nosave", "save_menu", "menu_nosave"):
+                        running = False
+                        save_on_exit = act in ("save_quit", "save_menu")
+                        exit_mode = "menu" if act in ("save_menu", "menu_nosave") else "quit"
                     continue
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
@@ -1975,6 +2154,7 @@ class Game:
                             self.modal.hide()
                         else:
                             self.paused = True
+                            self._pause_menu.reset()
                             self._pause_menu.layout(*self.screen_size)
                             self._pause_menu.sync_selection_to_current(*self.screen_size)
                     elif event.key == pygame.K_F1:
@@ -2033,6 +2213,13 @@ class Game:
             ):
                 self._return_to_tavern_at = None
                 self._return_to_tavern()
+            if (
+                not self.paused
+                and self._next_customer_at is not None
+                and time.monotonic() >= self._next_customer_at
+            ):
+                self._next_customer_at = None
+                self._next_customer()
             # Reflect streaming state in the side panel so buttons are
             # clearly unavailable while the LLM is busy.
             self.actions.set_enabled_all(not self.streaming)
@@ -2056,9 +2243,11 @@ class Game:
                 gold=self.world.gold,
                 reputation=self.world.reputation,
                 active_quests=len(self.world.active_quests),
-                gossip_count=len(self.world.gossip_heard),
+                memory_count=len(self.world.rumour_memory),
+                overheard_count=len(self.world.rumours_pending),
                 model_name=self.client.config.model,
                 supplies_summary=self._supplies_status_line(),
+                ollama_status=self._ollama_status_label(),
             )
             self.actions.draw(self.screen)
             self.toasts.draw(self.screen)
@@ -2068,17 +2257,18 @@ class Game:
                 self._pause_menu.draw(self.screen)
             pygame.display.flip()
 
-        self.world.save()
+        if save_on_exit:
+            self.world.save()
         self.music.dispose()
-        pygame.quit()
-        return 0
+        return exit_mode
 
     def _draw_corner_help(self) -> None:
         font = load_font(14)
         text = "F1 help   F2 settings   F5 next customer   T banner   Esc pause   drag top edge to maximize"
         surf = font.render(text, True, (180, 140, 70))
-        # Sit just above the input bar so the hint stays visible with taskbars.
-        target_y = self.text_input.rect.top - 6 - surf.get_height()
+        # Sit just above the conversation box (the text area between the
+        # player and the AI) so the words are never clipped by its border.
+        target_y = self.dialogue.rect.top - 8 - surf.get_height()
         y = max(72, min(target_y, self.screen_size[1] - 24 - surf.get_height()))
         self.screen.blit(surf, (20, y))
 
@@ -2090,8 +2280,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=TITLE)
     parser.add_argument(
         "--model",
-        default="llama3.2:3b",
-        help="Ollama model tag (default: llama3.2:3b)",
+        default=None,
+        help="Ollama model tag (default: saved setting or llama3.2:3b)",
     )
     parser.add_argument(
         "--seed",
@@ -2129,17 +2319,46 @@ def main(argv: list[str] | None = None) -> int:
     pygame.display.set_caption(TITLE)
     clock = pygame.time.Clock()
 
-    if args.demo or args.skip_menu:
-        screen_size = DEFAULT_SCREEN_SIZE
-    else:
-        menu = MainMenu(clock=clock, title=TITLE)
-        picked = menu.run()
-        if picked is None:
-            pygame.quit()
+    try:
+        if args.demo or args.skip_menu:
+            settings = GameSettings.load()
+            Game(
+                args,
+                screen_size=DEFAULT_SCREEN_SIZE,
+                save_slot=1,
+                new_game=False,
+                music_volume=settings.music_volume,
+            ).run()
             return 0
-        screen_size = picked
 
-    return Game(args, screen_size=screen_size).run()
+        # Outer loop: returning to the main menu from an in-game pause
+        # reopens the launcher instead of exiting the process.
+        while True:
+            menu = MainMenu(clock=clock, title=TITLE)
+            picked = menu.run()
+            if picked is None:
+                return 0
+
+            # Briefing screen (description + Help) before play starts,
+            # drawn at the size the player chose in the menu.
+            pygame.display.set_mode(picked.screen_size, DISPLAY_FLAGS)
+            choice = show_briefing(clock, TITLE)
+            if choice == "quit":
+                return 0
+            if choice == "menu":
+                continue
+
+            outcome = Game(
+                args,
+                screen_size=picked.screen_size,
+                save_slot=picked.save_slot,
+                new_game=picked.new_game,
+                music_volume=picked.music_volume,
+            ).run()
+            if outcome != "menu":
+                return 0
+    finally:
+        pygame.quit()
 
 
 if __name__ == "__main__":

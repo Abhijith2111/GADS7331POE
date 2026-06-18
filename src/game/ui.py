@@ -34,6 +34,57 @@ PANEL_BORDER = (120, 90, 50)
 WARN = (180, 60, 50)
 GOOD = (90, 140, 70)
 
+# Per-action accent colours so the side-panel buttons read as distinct
+# groups instead of one brown wall. Tuned to stay within the tavern palette
+# while remaining easy to tell apart. Anything not listed falls back to the
+# default amber. Reused by the Help guide so the colours match in both places.
+_DEFAULT_BUTTON_ACCENT = (96, 64, 32)
+ACTION_BUTTON_COLORS: dict[str, tuple[int, int, int]] = {
+    # Commerce — warm amber/gold.
+    "Show stock": (124, 90, 36),
+    "Sell item...": (140, 102, 30),
+    "Browse stalls": (124, 90, 36),
+    # Quests / work — blue.
+    "Ask for work": (52, 84, 124),
+    "View quests": (58, 98, 128),
+    # Gossip / rumours — violet.
+    "View gossip": (110, 66, 128),
+    # Flow / customers — teal.
+    "Next customer": (46, 108, 104),
+    # Travel / navigation — green.
+    "Leave the bar": (60, 104, 70),
+    "Back to bar": (60, 104, 70),
+    "Back to map": (46, 108, 104),
+    # Persistence — bright green.
+    "Save game": (74, 120, 58),
+    # Help — neutral slate.
+    "Help": (92, 84, 76),
+    # Grouped "main" buttons inherit their category's colour so the menu
+    # reads as the same family once expanded.
+    "Trade": (124, 90, 36),
+    "Quests": (52, 84, 124),
+    "Go back": (46, 108, 104),
+    "Menu": (92, 84, 76),
+    "Back": (80, 70, 60),
+}
+
+
+def action_button_color(label: str) -> tuple[int, int, int]:
+    """Accent colour for a named action button (default amber if unknown).
+
+    Tolerates the submenu decorations (a trailing ``\u25b6`` for a group or a
+    leading ``\u25c0`` on the Back button) so grouped buttons stay colour-matched.
+    """
+    key = label.replace(" \u25b6", "").replace("\u25c0 ", "").strip()
+    return ACTION_BUTTON_COLORS.get(key, _DEFAULT_BUTTON_ACCENT)
+
+
+def shift_color(
+    color: tuple[int, int, int], amount: int
+) -> tuple[int, int, int]:
+    """Lighten (positive) or darken (negative) a colour, clamped to 0-255."""
+    return tuple(max(0, min(255, c + amount)) for c in color)
+
 # Space above the modal bottom reserved for the Close row so body text clips
 # inside the brown frame (used by ModalPanel.draw).
 MODAL_BODY_BOTTOM_PAD = 70
@@ -265,9 +316,11 @@ class StatusBar:
         gold: int,
         reputation: dict[str, int],
         active_quests: int,
-        gossip_count: int,
+        memory_count: int,
+        overheard_count: int,
         model_name: str,
         supplies_summary: str = "",
+        ollama_status: str = "",
     ) -> None:
         bg = pygame.Surface(self.rect.size, pygame.SRCALPHA)
         bg.fill((20, 14, 8, 220))
@@ -289,7 +342,10 @@ class StatusBar:
         if supplies_summary:
             meta_parts.append(f"Stock {supplies_summary}")
         meta_parts.append(f"Quests: {active_quests}")
-        meta_parts.append(f"Gossip: {gossip_count}")
+        meta_parts.append(f"Memory: {memory_count}")
+        meta_parts.append(f"Overheard: {overheard_count}")
+        if ollama_status:
+            meta_parts.append(f"Ollama: {ollama_status}")
         meta_parts.append(f"Model: {model_name}")
         meta = self.small_font.render("   ".join(meta_parts), True, INK_SOFT)
         surface.blit(meta, (right_x - meta.get_width(), y + 6))
@@ -305,6 +361,28 @@ class Button:
     on_click: Callable[[], None]
     hot: bool = False
     enabled: bool = True
+    # Optional drawn arrow: "right" (expands a group) or "left" (go back).
+    arrow: str | None = None
+
+
+def draw_arrow(
+    surface: pygame.Surface,
+    rect: pygame.Rect,
+    direction: str,
+    color: tuple[int, int, int],
+) -> None:
+    """Draw a small solid triangle near the left/right edge of ``rect``."""
+    cy = rect.centery
+    size = max(5, min(8, rect.height // 5))
+    if direction == "right":
+        tip_x = rect.right - 12
+        base_x = tip_x - size
+        pts = [(base_x, cy - size), (base_x, cy + size), (tip_x, cy)]
+    else:  # left
+        tip_x = rect.left + 12
+        base_x = tip_x + size
+        pts = [(base_x, cy - size), (base_x, cy + size), (tip_x, cy)]
+    pygame.draw.polygon(surface, color, pts)
 
 
 class ModalPanel:
@@ -442,11 +520,12 @@ class ActionPanel:
         self.button_font = load_font(18, bold=True)
         self.buttons: list[Button] = []
         # Cached so we can re-disable/re-enable without callers re-passing.
-        self._specs: list[tuple[str, Callable[[], None]]] = []
+        # Each spec is (label, callback) or (label, callback, arrow).
+        self._specs: list[tuple] = []
         self._enabled = True
 
-    def set_buttons(self, specs: list[tuple[str, Callable[[], None]]]) -> None:
-        self._specs = specs
+    def set_buttons(self, specs: list[tuple]) -> None:
+        self._specs = list(specs)
         self._rebuild()
 
     def set_enabled_all(self, enabled: bool) -> None:
@@ -479,10 +558,18 @@ class ActionPanel:
         button_w = self.rect.width - padding * 2
         x = self.rect.left + padding
         y0 = self.rect.top + padding + title_h
-        for i, (label, cb) in enumerate(self._specs):
+        for i, spec in enumerate(self._specs):
+            label, cb = spec[0], spec[1]
+            arrow = spec[2] if len(spec) > 2 else None
             r = pygame.Rect(x, y0 + i * (button_h + gap), button_w, button_h)
             self.buttons.append(
-                Button(label=label, rect=r, on_click=cb, enabled=self._enabled)
+                Button(
+                    label=label,
+                    rect=r,
+                    on_click=cb,
+                    enabled=self._enabled,
+                    arrow=arrow,
+                )
             )
 
     def handle_event(self, event: pygame.event.Event) -> bool:
@@ -506,20 +593,20 @@ class ActionPanel:
         surface.blit(title_surf, (self.rect.left + 10, self.rect.top + 6))
 
         for b in self.buttons:
-            base = (90, 60, 30) if b.enabled else (50, 40, 30)
-            if b.hot:
-                base = (130, 90, 40)
+            accent = action_button_color(b.label)
+            if not b.enabled:
+                base = shift_color(accent, -52)
+                border = INK_SOFT
+            elif b.hot:
+                base = shift_color(accent, 34)
+                border = shift_color(accent, 80)
+            else:
+                base = accent
+                border = shift_color(accent, 60)
             pygame.draw.rect(surface, base, b.rect, border_radius=6)
-            pygame.draw.rect(
-                surface,
-                HIGHLIGHT if b.enabled else INK_SOFT,
-                b.rect,
-                2,
-                border_radius=6,
-            )
-            label = self.button_font.render(
-                b.label, True, PARCHMENT if b.enabled else INK_SOFT
-            )
+            pygame.draw.rect(surface, border, b.rect, 2, border_radius=6)
+            fg = PARCHMENT if b.enabled else INK_SOFT
+            label = self.button_font.render(b.label, True, fg)
             surface.blit(
                 label,
                 (
@@ -527,6 +614,8 @@ class ActionPanel:
                     b.rect.centery - label.get_height() // 2,
                 ),
             )
+            if b.arrow:
+                draw_arrow(surface, b.rect, b.arrow, fg)
 
 
 # ---------------------------------------------------------------------------
