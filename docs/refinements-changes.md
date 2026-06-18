@@ -5,6 +5,17 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-06-18 — Group music + screen size under an Options button
+
+**Tag:** `ui`, `ux`
+**Source:** user request — fold the music slider and screen-size control into a single Options button in both menus. AI-assisted (Cursor).
+
+- **Main menu** now reads slots → New Game / Continue → **Options** → Help → Quit. Options opens an overlay holding the music-volume slider and a **Window size** button (which opens the existing preset picker). Hotkey **O** opens it.
+- **Pause menu** footer is now Resume → **Options** → Main Menu → Quit; the volume slider and Window size button moved into the same Options overlay (with the size picker nested one level deeper). The main pause panel is slimmer.
+- Overlay stacking is handled by precedence in `handle_event` / `draw` (confirm > size picker > options > base), so picking a size returns to Options and Back/Esc/click-outside dismiss each layer cleanly.
+
+---
+
 ## 2026-06-18 — Window-size picker, tidier corner hint, no-overlap volume row
 
 **Tag:** `ui`, `ux`

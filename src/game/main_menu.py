@@ -82,6 +82,11 @@ class MainMenu:
         self._confirm_no_rect = pygame.Rect(0, 0, 1, 1)
         self._dragging_volume = False
         self._pending_overwrite_slot: int | None = None
+        # Options overlay (music volume + window size live here now).
+        self._showing_options = False
+        self._options_rect = pygame.Rect(0, 0, 1, 1)
+        self._options_panel_rect = pygame.Rect(0, 0, 1, 1)
+        self._options_back_rect = pygame.Rect(0, 0, 1, 1)
         # Window-size picker overlay (opened from the Window size button).
         self._choosing_aspect = False
         self._aspect_panel_rect = pygame.Rect(0, 0, 1, 1)
@@ -104,15 +109,10 @@ class MainMenu:
         btn_w = (bw - 12) // 2
         self._new_rect = pygame.Rect(x0, y, btn_w, 44)
         self._continue_rect = pygame.Rect(x0 + btn_w + 12, y, btn_w, 44)
-        y += 80  # generous gap so the volume label clears the buttons above
+        y += 56
 
-        # Settings: music volume, then resolution (window size).
-        self._vol_minus_rect = pygame.Rect(x0, y, 36, 32)
-        self._vol_track_rect = pygame.Rect(x0 + 44, y + 10, bw - 88, 12)
-        self._vol_plus_rect = pygame.Rect(x0 + bw - 36, y, 36, 32)
-        y += 50
-
-        self._aspect_rect = pygame.Rect(x0, y, bw, 38)
+        # Options button (opens music volume + window size).
+        self._options_rect = pygame.Rect(x0, y, bw, 42)
         y += 54
 
         # Help then Quit at the bottom.
@@ -122,6 +122,18 @@ class MainMenu:
         cy = sh // 2
         self._confirm_yes_rect = pygame.Rect(cx - 210, cy + 40, 180, 40)
         self._confirm_no_rect = pygame.Rect(cx + 30, cy + 40, 180, 40)
+
+        # Options overlay panel (music volume slider + window-size button).
+        opw = min(480, sw - 60)
+        oph = min(300, sh - 60)
+        opx = (sw - opw) // 2
+        opy = (sh - oph) // 2
+        self._options_panel_rect = pygame.Rect(opx, opy, opw, oph)
+        self._vol_minus_rect = pygame.Rect(opx + 20, opy + 96, 36, 30)
+        self._vol_track_rect = pygame.Rect(opx + 64, opy + 104, opw - 128, 14)
+        self._vol_plus_rect = pygame.Rect(opx + opw - 20 - 36, opy + 96, 36, 30)
+        self._aspect_rect = pygame.Rect(opx + 20, opy + 152, opw - 40, 40)
+        self._options_back_rect = pygame.Rect(opx + opw - 140, opy + oph - 52, 120, 38)
 
         # Window-size picker overlay (centred, lists every preset).
         n = len(ASPECT_OPTIONS)
@@ -178,6 +190,68 @@ class MainMenu:
             self._pending_overwrite_slot = self._selected_slot
             return None
         return self._finish(new_game=True)
+
+    def _draw_options(self, screen: pygame.Surface, mouse: tuple[int, int]) -> None:
+        sw, sh = screen.get_size()
+        overlay = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 170))
+        screen.blit(overlay, (0, 0))
+
+        pr = self._options_panel_rect
+        pygame.draw.rect(screen, (38, 26, 18), pr, border_radius=12)
+        pygame.draw.rect(screen, HIGHLIGHT, pr, 3, border_radius=12)
+
+        title = self.heading_font.render("Options", True, HIGHLIGHT)
+        screen.blit(title, (pr.centerx - title.get_width() // 2, pr.top + 18))
+
+        # Music volume.
+        vol_lbl = self.body_font.render(
+            f"Music volume: {int(round(self._volume * 100))}%", True, PARCHMENT
+        )
+        screen.blit(vol_lbl, (pr.left + 20, self._vol_minus_rect.top - 26))
+        for rect, label in ((self._vol_minus_rect, "-"), (self._vol_plus_rect, "+")):
+            hot = rect.collidepoint(mouse)
+            bg = (58, 42, 26) if hot else (44, 32, 22)
+            pygame.draw.rect(screen, bg, rect, border_radius=4)
+            pygame.draw.rect(screen, (110, 82, 48), rect, 2, border_radius=4)
+            surf = self.heading_font.render(label, True, PARCHMENT)
+            screen.blit(
+                surf,
+                (rect.centerx - surf.get_width() // 2, rect.centery - surf.get_height() // 2),
+            )
+        tr = self._vol_track_rect
+        pygame.draw.rect(screen, (40, 30, 20), tr, border_radius=4)
+        fill_w = max(4, int(tr.width * self._volume))
+        pygame.draw.rect(
+            screen, HIGHLIGHT, pygame.Rect(tr.left, tr.top, fill_w, tr.height), border_radius=4
+        )
+
+        # Window size button.
+        ar = self._aspect_rect
+        hot = ar.collidepoint(mouse)
+        pygame.draw.rect(screen, (58, 42, 26) if hot else (44, 32, 22), ar, border_radius=6)
+        pygame.draw.rect(screen, (120, 90, 50), ar, 2, border_radius=6)
+        asp = ASPECT_OPTIONS[self._aspect_index]
+        asp_txt = self.body_font.render(
+            f"Window size: {asp.label} ({asp.width}\u00d7{asp.height})", True, PARCHMENT
+        )
+        screen.blit(asp_txt, (ar.left + 12, ar.centery - asp_txt.get_height() // 2))
+        tap = self.small_font.render("change >", True, INK_SOFT)
+        screen.blit(tap, (ar.right - tap.get_width() - 12, ar.centery - tap.get_height() // 2))
+
+        # Back / close.
+        hot = self._options_back_rect.collidepoint(mouse)
+        bg = (100, 70, 36) if hot else (58, 42, 26)
+        pygame.draw.rect(screen, bg, self._options_back_rect, border_radius=8)
+        pygame.draw.rect(screen, HIGHLIGHT, self._options_back_rect, 2, border_radius=8)
+        bsurf = self.body_font.render("Back", True, PARCHMENT)
+        screen.blit(
+            bsurf,
+            (
+                self._options_back_rect.centerx - bsurf.get_width() // 2,
+                self._options_back_rect.centery - bsurf.get_height() // 2,
+            ),
+        )
 
     def _draw_aspect_picker(
         self, screen: pygame.Surface, sw: int, sh: int, mouse: tuple[int, int]
@@ -262,6 +336,28 @@ class MainMenu:
                             self._choosing_aspect = False
                     continue
 
+                if self._showing_options:
+                    if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                        self._showing_options = False
+                    elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        mx, my = event.pos
+                        if self._vol_minus_rect.collidepoint(mx, my):
+                            self._set_volume(self._volume - 0.05)
+                        elif self._vol_plus_rect.collidepoint(mx, my):
+                            self._set_volume(self._volume + 0.05)
+                        elif self._vol_track_rect.collidepoint(mx, my):
+                            self._dragging_volume = True
+                            self._set_volume(self._volume_from_x(mx))
+                        elif self._aspect_rect.collidepoint(mx, my):
+                            self._choosing_aspect = True
+                        elif self._options_back_rect.collidepoint(mx, my) or not self._options_panel_rect.collidepoint(mx, my):
+                            self._showing_options = False
+                    elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                        self._dragging_volume = False
+                    elif event.type == pygame.MOUSEMOTION and self._dragging_volume:
+                        self._set_volume(self._volume_from_x(event.pos[0]))
+                    continue
+
                 if self._pending_overwrite_slot is not None:
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE:
@@ -293,27 +389,18 @@ class MainMenu:
                         screen = pygame.display.set_mode((sw, sh), MENU_DISPLAY_FLAGS)
                         self._layout(sw, sh)
                         continue
-                    if event.key == pygame.K_UP:
-                        self._aspect_index = (self._aspect_index - 1) % len(ASPECT_OPTIONS)
-                    if event.key == pygame.K_DOWN:
-                        self._aspect_index = (self._aspect_index + 1) % len(ASPECT_OPTIONS)
                     if event.key in (pygame.K_1, pygame.K_2, pygame.K_3):
                         self._selected_slot = event.key - pygame.K_0
+                    if event.key == pygame.K_o:
+                        self._showing_options = True
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     mx, my = event.pos
                     for rect, slot in self._slot_rects:
                         if rect.collidepoint(mx, my):
                             self._selected_slot = slot
                             break
-                    if self._vol_minus_rect.collidepoint(mx, my):
-                        self._set_volume(self._volume - 0.05)
-                    elif self._vol_plus_rect.collidepoint(mx, my):
-                        self._set_volume(self._volume + 0.05)
-                    elif self._vol_track_rect.collidepoint(mx, my):
-                        self._dragging_volume = True
-                        self._set_volume(self._volume_from_x(mx))
-                    elif self._aspect_rect.collidepoint(mx, my):
-                        self._choosing_aspect = True
+                    if self._options_rect.collidepoint(mx, my):
+                        self._showing_options = True
                     elif self._new_rect.collidepoint(mx, my):
                         picked = self._try_new_game()
                         if picked is not None:
@@ -333,10 +420,6 @@ class MainMenu:
                             self._layout(sw, sh)
                     elif self._quit_rect.collidepoint(mx, my):
                         running = False
-                elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-                    self._dragging_volume = False
-                elif event.type == pygame.MOUSEMOTION and self._dragging_volume:
-                    self._set_volume(self._volume_from_x(event.pos[0]))
 
             screen.fill((18, 12, 8))
             tit = self.title_font.render(self.title, True, HIGHLIGHT)
@@ -358,47 +441,18 @@ class MainMenu:
                 detail = self.small_font.render(self._slot_label(summary), True, INK_SOFT)
                 screen.blit(detail, (rect.left + 12, rect.top + 28))
 
-            vol_lbl = self.body_font.render(
-                f"Music volume: {int(round(self._volume * 100))}%",
-                True,
-                PARCHMENT,
+            orr = self._options_rect
+            hot = orr.collidepoint(mouse)
+            bg = (58, 42, 26) if hot else (44, 32, 22)
+            pygame.draw.rect(screen, bg, orr, border_radius=8)
+            pygame.draw.rect(screen, HIGHLIGHT, orr, 2, border_radius=8)
+            osurf = self.heading_font.render("Options", True, PARCHMENT)
+            screen.blit(
+                osurf,
+                (orr.centerx - osurf.get_width() // 2, orr.centery - osurf.get_height() // 2),
             )
-            screen.blit(vol_lbl, (self._vol_minus_rect.left, self._vol_minus_rect.top - 22))
-            for rect, label in (
-                (self._vol_minus_rect, "-"),
-                (self._vol_plus_rect, "+"),
-            ):
-                hot = rect.collidepoint(mouse)
-                bg = (58, 42, 26) if hot else (44, 32, 22)
-                pygame.draw.rect(screen, bg, rect, border_radius=4)
-                surf = self.heading_font.render(label, True, PARCHMENT)
-                screen.blit(
-                    surf,
-                    (rect.centerx - surf.get_width() // 2, rect.centery - surf.get_height() // 2),
-                )
-            tr = self._vol_track_rect
-            pygame.draw.rect(screen, (40, 30, 20), tr, border_radius=4)
-            fill_w = max(4, int(tr.width * self._volume))
-            pygame.draw.rect(
-                screen,
-                HIGHLIGHT,
-                pygame.Rect(tr.left, tr.top, fill_w, tr.height),
-                border_radius=4,
-            )
-
-            ar = self._aspect_rect
-            hot = ar.collidepoint(mouse)
-            pygame.draw.rect(screen, (58, 42, 26) if hot else (44, 32, 22), ar, border_radius=6)
-            pygame.draw.rect(screen, (120, 90, 50), ar, 2, border_radius=6)
-            asp = ASPECT_OPTIONS[self._aspect_index]
-            asp_txt = self.body_font.render(
-                f"Window size: {asp.label} ({asp.width}\u00d7{asp.height})",
-                True,
-                PARCHMENT,
-            )
-            screen.blit(asp_txt, (ar.left + 12, ar.centery - asp_txt.get_height() // 2))
-            tap = self.small_font.render("change >", True, INK_SOFT)
-            screen.blit(tap, (ar.right - tap.get_width() - 12, ar.centery - tap.get_height() // 2))
+            otip = self.small_font.render("music & screen size", True, INK_SOFT)
+            screen.blit(otip, (orr.right - otip.get_width() - 14, orr.centery - otip.get_height() // 2))
 
             can_continue = slot_has_save(self._selected_slot)
             for rect, label, enabled, primary in (
@@ -465,11 +519,13 @@ class MainMenu:
                         (rect.centerx - surf.get_width() // 2, rect.centery - surf.get_height() // 2),
                     )
 
+            if self._showing_options:
+                self._draw_options(screen, mouse)
             if self._choosing_aspect:
                 self._draw_aspect_picker(screen, sw, sh, mouse)
 
             hint = self.small_font.render(
-                "1/2/3 select slot   New Game / Continue   F1 help   Esc quit",
+                "1/2/3 select slot   New Game / Continue   O options   F1 help   Esc quit",
                 True,
                 INK_SOFT,
             )

@@ -101,11 +101,12 @@ This:
 ### Start-up flow
 
 - The **main menu** is laid out top-to-bottom like a normal game: choose a
-  **save slot**, then **New Game / Continue**, then **music volume** and a
-  **Window size** button (which opens a panel listing every resolution
-  preset to pick from), then **Help**, then **Quit**. The **Help** button
-  (or **F1**) opens an illustrated guide that explains the screen layout
-  and what every action button does.
+  **save slot**, then **New Game / Continue**, then **Options**, then
+  **Help**, then **Quit**. **Options** opens a panel with the **music
+  volume** slider and a **Window size** button (which lists every
+  resolution preset to pick from). The **Help** button (or **F1**) opens an
+  illustrated guide that explains the screen layout and what every action
+  button does.
 - After you pick a slot, a short **briefing screen** describes what you'll
   be doing before play begins (with its own **Begin / Help / Back** buttons).
 
@@ -124,11 +125,11 @@ a sub-list with a **◀ Back** button:
 ### Pause menu (Esc)
 
 Press **Esc** to pause. Ordered like a normal game's pause screen, it lets you
-**Resume**, adjust **music volume** (slider or ←/→), open a **Window size**
-picker (a panel listing every resolution preset), return to the **Main Menu**,
-or **Quit**. Choosing Main Menu or Quit first asks whether you want to **save**
-so progress is never lost by accident. You can also quit straight from the
-in-game **Menu ▶ Quit** button, which opens the same save-or-discard prompt.
+**Resume**, open **Options** (music volume slider + a Window size picker),
+return to the **Main Menu**, or **Quit**. Choosing Main Menu or Quit first asks
+whether you want to **save** so progress is never lost by accident. You can also
+quit straight from the in-game **Menu ▶ Quit** button, which opens the same
+save-or-discard prompt.
 
 ### Background music
 

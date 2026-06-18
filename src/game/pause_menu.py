@@ -26,11 +26,17 @@ class PauseMenu:
         self.body_font = load_font(17)
         self.small_font = load_font(14)
         self._selected = 0
-        self._panel_rect = pygame.Rect(0, 0, 520, 360)
+        self._panel_rect = pygame.Rect(0, 0, 520, 240)
         self._resume_rect = pygame.Rect(0, 0, 1, 1)
-        self._size_rect = pygame.Rect(0, 0, 1, 1)
+        self._options_rect = pygame.Rect(0, 0, 1, 1)
         self._menu_rect = pygame.Rect(0, 0, 1, 1)
         self._quit_rect = pygame.Rect(0, 0, 1, 1)
+
+        # Options overlay (music volume + window size live here now).
+        self._showing_options = False
+        self._options_panel_rect = pygame.Rect(0, 0, 1, 1)
+        self._options_back_rect = pygame.Rect(0, 0, 1, 1)
+        self._size_rect = pygame.Rect(0, 0, 1, 1)
 
         # Window-size picker overlay state.
         self._choosing_size = False
@@ -57,6 +63,7 @@ class PauseMenu:
         """Clear any in-progress confirmation. Call when (re)opening the menu."""
         self._confirm = None
         self._choosing_size = False
+        self._showing_options = False
         self._dragging_volume = False
 
     def open_confirm(self, kind: str) -> None:
@@ -83,34 +90,36 @@ class PauseMenu:
 
     def layout(self, sw: int, sh: int) -> None:
         pw = min(520, sw - 40)
-        ph = min(360, sh - 40)
+        ph = min(240, sh - 40)
         px = (sw - pw) // 2
         py = (sh - ph) // 2
         self._panel_rect = pygame.Rect(px, py, pw, ph)
 
-        bx = px + 20
-        bw = pw - 40
-
-        # Volume row near the top (label sits above it).
-        vy = py + 96
-        self._vol_minus_rect = pygame.Rect(bx, vy, 36, 30)
-        self._vol_track_rect = pygame.Rect(bx + 44, vy + 8, bw - 88, 14)
-        self._vol_plus_rect = pygame.Rect(px + pw - 20 - 36, vy, 36, 30)
-
-        # Full-width "Window size" button that opens the picker.
-        self._size_rect = pygame.Rect(bx, py + 168, bw, 40)
-
-        # Footer row, ordered Resume -> Main Menu -> Quit.
+        # Footer row, ordered Resume -> Options -> Main Menu -> Quit.
         foot_y = py + ph - 58
-        gap = 12
+        gap = 10
         inner = pw - 40
-        btn_w = (inner - 2 * gap) // 3
+        btn_w = (inner - 3 * gap) // 4
         x = px + 20
         self._resume_rect = pygame.Rect(x, foot_y, btn_w, 42)
+        x += btn_w + gap
+        self._options_rect = pygame.Rect(x, foot_y, btn_w, 42)
         x += btn_w + gap
         self._menu_rect = pygame.Rect(x, foot_y, btn_w, 42)
         x += btn_w + gap
         self._quit_rect = pygame.Rect(x, foot_y, btn_w, 42)
+
+        # Options overlay panel (music volume slider + window-size button).
+        opw = min(480, sw - 60)
+        oph = min(300, sh - 60)
+        opx = (sw - opw) // 2
+        opy = (sh - oph) // 2
+        self._options_panel_rect = pygame.Rect(opx, opy, opw, oph)
+        self._vol_minus_rect = pygame.Rect(opx + 20, opy + 96, 36, 30)
+        self._vol_track_rect = pygame.Rect(opx + 64, opy + 104, opw - 128, 14)
+        self._vol_plus_rect = pygame.Rect(opx + opw - 20 - 36, opy + 96, 36, 30)
+        self._size_rect = pygame.Rect(opx + 20, opy + 152, opw - 40, 40)
+        self._options_back_rect = pygame.Rect(opx + opw - 140, opy + oph - 52, 120, 38)
 
         # Confirmation overlay (centred independently of the main panel).
         cw = min(480, sw - 40)
@@ -156,39 +165,53 @@ class PauseMenu:
             return self._handle_confirm_event(event)
         if self._choosing_size:
             return self._handle_size_event(event)
+        if self._showing_options:
+            return self._handle_options_event(event)
 
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
                 return "resume"
-            if event.key == pygame.K_LEFT:
-                self._set_volume(self.volume - 0.05, commit=True)
-            elif event.key == pygame.K_RIGHT:
-                self._set_volume(self.volume + 0.05, commit=True)
+            if event.key == pygame.K_o:
+                self._showing_options = True
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mx, my = event.pos
             if not self._panel_rect.collidepoint(mx, my):
                 return "resume"
-            if self._vol_minus_rect.collidepoint(mx, my):
-                self._set_volume(self.volume - 0.05, commit=True)
-                return None
-            if self._vol_plus_rect.collidepoint(mx, my):
-                self._set_volume(self.volume + 0.05, commit=True)
-                return None
-            if self._vol_track_rect.collidepoint(mx, my):
-                self._dragging_volume = True
-                self._set_volume(self._volume_from_x(mx), commit=False)
-                return None
-            if self._size_rect.collidepoint(mx, my):
-                self._choosing_size = True
-                return None
             if self._resume_rect.collidepoint(mx, my):
                 return "resume"
+            if self._options_rect.collidepoint(mx, my):
+                self._showing_options = True
+                return None
             if self._menu_rect.collidepoint(mx, my):
                 self._confirm = "menu"
                 return None
             if self._quit_rect.collidepoint(mx, my):
                 self._confirm = "quit"
                 return None
+        return None
+
+    def _handle_options_event(self, event: pygame.event.Event) -> str | None:
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self._showing_options = False
+            elif event.key == pygame.K_LEFT:
+                self._set_volume(self.volume - 0.05, commit=True)
+            elif event.key == pygame.K_RIGHT:
+                self._set_volume(self.volume + 0.05, commit=True)
+            return None
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mx, my = event.pos
+            if self._vol_minus_rect.collidepoint(mx, my):
+                self._set_volume(self.volume - 0.05, commit=True)
+            elif self._vol_plus_rect.collidepoint(mx, my):
+                self._set_volume(self.volume + 0.05, commit=True)
+            elif self._vol_track_rect.collidepoint(mx, my):
+                self._dragging_volume = True
+                self._set_volume(self._volume_from_x(mx), commit=False)
+            elif self._size_rect.collidepoint(mx, my):
+                self._choosing_size = True
+            elif self._options_back_rect.collidepoint(mx, my) or not self._options_panel_rect.collidepoint(mx, my):
+                self._showing_options = False
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             if self._dragging_volume:
                 self._dragging_volume = False
@@ -261,54 +284,19 @@ class PauseMenu:
         pygame.draw.rect(surface, HIGHLIGHT, pr, 3, border_radius=12)
 
         title = self.title_font.render("Paused", True, HIGHLIGHT)
-        surface.blit(title, (pr.centerx - title.get_width() // 2, pr.top + 16))
+        surface.blit(title, (pr.centerx - title.get_width() // 2, pr.top + 18))
 
         mouse = pygame.mouse.get_pos()
 
-        # --- Music volume ---------------------------------------------
-        vol_lbl = self.body_font.render(
-            f"Music volume: {int(round(self.volume * 100))}%", True, PARCHMENT
+        sub = self.small_font.render(
+            "Adjust music and screen size under Options.", True, INK_SOFT
         )
-        surface.blit(vol_lbl, (pr.left + 20, self._vol_minus_rect.top - 26))
-        for rect, label in (
-            (self._vol_minus_rect, "-"),
-            (self._vol_plus_rect, "+"),
-        ):
-            hot = rect.collidepoint(mouse)
-            bg = (54, 40, 28) if hot else (42, 30, 22)
-            pygame.draw.rect(surface, bg, rect, border_radius=4)
-            pygame.draw.rect(surface, (110, 82, 48), rect, 2, border_radius=4)
-            surf = self.heading_font.render(label, True, PARCHMENT)
-            surface.blit(
-                surf,
-                (rect.centerx - surf.get_width() // 2, rect.centery - surf.get_height() // 2),
-            )
-        tr = self._vol_track_rect
-        pygame.draw.rect(surface, (40, 30, 20), tr, border_radius=4)
-        fill_w = max(4, int(tr.width * self.volume))
-        pygame.draw.rect(
-            surface,
-            HIGHLIGHT,
-            pygame.Rect(tr.left, tr.top, fill_w, tr.height),
-            border_radius=4,
-        )
+        surface.blit(sub, (pr.centerx - sub.get_width() // 2, pr.top + 66))
 
-        # --- Window size button --------------------------------------
-        cur = ASPECT_OPTIONS[self._selected]
-        sr = self._size_rect
-        hot = sr.collidepoint(mouse)
-        pygame.draw.rect(surface, (54, 40, 28) if hot else (42, 30, 22), sr, border_radius=6)
-        pygame.draw.rect(surface, (120, 90, 50), sr, 2, border_radius=6)
-        size_lbl = self.body_font.render(
-            f"Window size: {cur.label} ({cur.width}\u00d7{cur.height})", True, PARCHMENT
-        )
-        surface.blit(size_lbl, (sr.left + 12, sr.centery - size_lbl.get_height() // 2))
-        tap = self.small_font.render("change >", True, INK_SOFT)
-        surface.blit(tap, (sr.right - tap.get_width() - 12, sr.centery - tap.get_height() // 2))
-
-        # --- Footer buttons (Resume / Main Menu / Quit) ---------------
+        # --- Footer buttons (Resume / Options / Main Menu / Quit) -----
         for label, rect, primary in (
             ("Resume", self._resume_rect, True),
+            ("Options", self._options_rect, False),
             ("Main Menu", self._menu_rect, False),
             ("Quit", self._quit_rect, False),
         ):
@@ -327,15 +315,69 @@ class PauseMenu:
                 ),
             )
 
-        hint = self.small_font.render(
-            "Esc / click outside - resume      Left / Right - volume",
-            True,
-            INK_SOFT,
-        )
-        surface.blit(hint, (pr.centerx - hint.get_width() // 2, pr.bottom - 86))
-
+        if self._showing_options:
+            self._draw_options(surface)
         if self._choosing_size:
             self._draw_size_picker(surface)
+
+    def _draw_options(self, surface: pygame.Surface) -> None:
+        pr = self._options_panel_rect
+        pygame.draw.rect(surface, (38, 26, 18), pr, border_radius=12)
+        pygame.draw.rect(surface, HIGHLIGHT, pr, 3, border_radius=12)
+
+        title = self.heading_font.render("Options", True, HIGHLIGHT)
+        surface.blit(title, (pr.centerx - title.get_width() // 2, pr.top + 18))
+
+        mouse = pygame.mouse.get_pos()
+
+        # Music volume.
+        vol_lbl = self.body_font.render(
+            f"Music volume: {int(round(self.volume * 100))}%", True, PARCHMENT
+        )
+        surface.blit(vol_lbl, (pr.left + 20, self._vol_minus_rect.top - 26))
+        for rect, label in ((self._vol_minus_rect, "-"), (self._vol_plus_rect, "+")):
+            hot = rect.collidepoint(mouse)
+            bg = (54, 40, 28) if hot else (42, 30, 22)
+            pygame.draw.rect(surface, bg, rect, border_radius=4)
+            pygame.draw.rect(surface, (110, 82, 48), rect, 2, border_radius=4)
+            surf = self.heading_font.render(label, True, PARCHMENT)
+            surface.blit(
+                surf,
+                (rect.centerx - surf.get_width() // 2, rect.centery - surf.get_height() // 2),
+            )
+        tr = self._vol_track_rect
+        pygame.draw.rect(surface, (40, 30, 20), tr, border_radius=4)
+        fill_w = max(4, int(tr.width * self.volume))
+        pygame.draw.rect(
+            surface, HIGHLIGHT, pygame.Rect(tr.left, tr.top, fill_w, tr.height), border_radius=4
+        )
+
+        # Window size button.
+        cur = ASPECT_OPTIONS[self._selected]
+        sr = self._size_rect
+        hot = sr.collidepoint(mouse)
+        pygame.draw.rect(surface, (54, 40, 28) if hot else (42, 30, 22), sr, border_radius=6)
+        pygame.draw.rect(surface, (120, 90, 50), sr, 2, border_radius=6)
+        size_lbl = self.body_font.render(
+            f"Window size: {cur.label} ({cur.width}\u00d7{cur.height})", True, PARCHMENT
+        )
+        surface.blit(size_lbl, (sr.left + 12, sr.centery - size_lbl.get_height() // 2))
+        tap = self.small_font.render("change >", True, INK_SOFT)
+        surface.blit(tap, (sr.right - tap.get_width() - 12, sr.centery - tap.get_height() // 2))
+
+        # Back / close.
+        hot = self._options_back_rect.collidepoint(mouse)
+        bg = (92, 64, 34) if hot else (58, 42, 26)
+        pygame.draw.rect(surface, bg, self._options_back_rect, border_radius=8)
+        pygame.draw.rect(surface, HIGHLIGHT, self._options_back_rect, 2, border_radius=8)
+        bsurf = self.body_font.render("Back", True, PARCHMENT)
+        surface.blit(
+            bsurf,
+            (
+                self._options_back_rect.centerx - bsurf.get_width() // 2,
+                self._options_back_rect.centery - bsurf.get_height() // 2,
+            ),
+        )
 
     def _draw_size_picker(self, surface: pygame.Surface) -> None:
         pr = self._size_panel_rect
