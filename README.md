@@ -100,9 +100,11 @@ This:
 
 ### Start-up flow
 
-- The **main menu** offers **New Game / Continue / Help / Quit**. The
-  **Help** button (or **F1**) opens an illustrated guide that explains the
-  screen layout and what every action button does.
+- The **main menu** is laid out top-to-bottom like a normal game: choose a
+  **save slot**, then **New Game / Continue**, then **music volume** and
+  **resolution** (a click-to-cycle window-size button), then **Help**, then
+  **Quit**. The **Help** button (or **F1**) opens an illustrated guide that
+  explains the screen layout and what every action button does.
 - After you pick a slot, a short **briefing screen** describes what you'll
   be doing before play begins (with its own **Begin / Help / Back** buttons).
 
@@ -116,13 +118,16 @@ a sub-list with a **◀ Back** button:
 - **Quests ▶** (blue) — *Ask for work*, *View quests*
 - **View gossip** (violet) — standalone
 - **Next customer** (teal) / **Leave the bar** (green) — standalone
-- **Menu ▶** (slate) — *Save game*, *Help*
+- **Menu ▶** (slate) — *Save game*, *Help*, *Quit*
 
 ### Pause menu (Esc)
 
-Press **Esc** to pause. From there you can **Resume**, change the **window
-size**, return to the **Main Menu**, or **Quit**. Choosing Main Menu or Quit
+Press **Esc** to pause. Ordered like a normal game's pause screen, it lets you
+**Resume**, adjust **music volume** (slider or ←/→), change the **window size**
+(Apply), return to the **Main Menu**, or **Quit**. Choosing Main Menu or Quit
 first asks whether you want to **save** so progress is never lost by accident.
+You can also quit straight from the in-game **Menu ▶ Quit** button, which opens
+the same save-or-discard prompt.
 
 ### Background music
 

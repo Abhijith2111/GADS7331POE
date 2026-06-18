@@ -87,26 +87,30 @@ class MainMenu:
         cx = sw // 2
         bw = min(520, sw - 80)
         x0 = cx - bw // 2
-        y = 108
+        y = 104
         self._slot_rects.clear()
-        slot_h = 52
+        slot_h = 50
         for i in range(SAVE_SLOT_COUNT):
             r = pygame.Rect(x0, y + i * (slot_h + 8), bw, slot_h)
             self._slot_rects.append((r, i + 1))
-        y += SAVE_SLOT_COUNT * (slot_h + 8) + 20
+        y += SAVE_SLOT_COUNT * (slot_h + 8) + 16
 
+        # Primary actions first, the way a normal game's menu reads.
+        btn_w = (bw - 12) // 2
+        self._new_rect = pygame.Rect(x0, y, btn_w, 44)
+        self._continue_rect = pygame.Rect(x0 + btn_w + 12, y, btn_w, 44)
+        y += 58
+
+        # Settings: music volume, then resolution (window size).
         self._vol_minus_rect = pygame.Rect(x0, y, 36, 32)
         self._vol_track_rect = pygame.Rect(x0 + 44, y + 10, bw - 88, 12)
         self._vol_plus_rect = pygame.Rect(x0 + bw - 36, y, 36, 32)
-        y += 44
+        y += 46
 
         self._aspect_rect = pygame.Rect(x0, y, bw, 34)
         y += 50
 
-        btn_w = (bw - 12) // 2
-        self._new_rect = pygame.Rect(x0, y, btn_w, 42)
-        self._continue_rect = pygame.Rect(x0 + btn_w + 12, y, btn_w, 42)
-        y += 52
+        # Help then Quit at the bottom.
         self._help_rect = pygame.Rect(x0, y, btn_w, 40)
         self._quit_rect = pygame.Rect(x0 + btn_w + 12, y, btn_w, 40)
 

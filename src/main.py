@@ -227,6 +227,7 @@ class Game:
         self.settings = GameSettings.load()
         vol = music_volume if music_volume is not None else self.settings.music_volume
         self.music.set_volume(vol)
+        self._music_volume = vol
         if not self.demo_mode:
             self.music.start()
 
@@ -1547,6 +1548,7 @@ class Game:
                 "Menu": [
                     ("Save game", self._save_game),
                     ("Help", self._show_help),
+                    ("Quit", self._quit_from_menu),
                 ],
             }
             root: list[tuple[str, Any]] = [
@@ -1562,6 +1564,7 @@ class Game:
                 "Menu": [
                     ("Save game", self._save_game),
                     ("Help", self._show_help),
+                    ("Quit", self._quit_from_menu),
                 ],
             }
             root = [
@@ -1577,6 +1580,7 @@ class Game:
                 "Menu": [
                     ("Save game", self._save_game),
                     ("Help", self._show_help),
+                    ("Quit", self._quit_from_menu),
                 ],
             }
             root = [("group", "Go back")]
@@ -1609,6 +1613,28 @@ class Game:
     def _close_action_group(self) -> None:
         self._action_group = None
         self._refresh_action_buttons()
+
+    def _quit_from_menu(self) -> None:
+        """In-game Menu -> Quit: open the pause menu's save-or-discard prompt."""
+        self._open_pause_menu(confirm="quit")
+
+    def _open_pause_menu(self, *, confirm: str | None = None) -> None:
+        """Enter the paused state and (re)bind the pause-menu controls."""
+        self.paused = True
+        self._pause_menu.reset()
+        self._pause_menu.layout(*self.screen_size)
+        self._pause_menu.sync_selection_to_current(*self.screen_size)
+        self._pause_menu.set_volume_controls(self._music_volume, self._on_pause_volume)
+        if confirm is not None:
+            self._pause_menu.open_confirm(confirm)
+
+    def _on_pause_volume(self, volume: float, commit: bool) -> None:
+        """Apply a pause-menu volume change live; persist it when committed."""
+        self._music_volume = volume
+        self.music.set_volume(volume)
+        if commit:
+            self.settings.music_volume = volume
+            self.settings.save()
 
     def _enter_world_map(self) -> None:
         if self.streaming or self.modal.visible:
@@ -2153,10 +2179,7 @@ class Game:
                         if self.modal.visible:
                             self.modal.hide()
                         else:
-                            self.paused = True
-                            self._pause_menu.reset()
-                            self._pause_menu.layout(*self.screen_size)
-                            self._pause_menu.sync_selection_to_current(*self.screen_size)
+                            self._open_pause_menu()
                     elif event.key == pygame.K_F1:
                         self._show_help()
                     elif event.key == pygame.K_F2:

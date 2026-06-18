@@ -63,7 +63,7 @@ BUTTON_GUIDE = (
     ("View gossip", "Read overheard rumours; Remember, Offer, or Spread them.", None),
     ("Next customer", "Send this patron away and bring in the next one.", None),
     ("Leave the bar", "Open the world map to travel and buy bulk supplies.", None),
-    ("Menu", "Save your game or open this help guide (Help is also F1).", "right"),
+    ("Menu", "Save your game, open this help guide (F1), or quit.", "right"),
 )
 
 

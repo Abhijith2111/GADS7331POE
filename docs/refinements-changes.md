@@ -5,6 +5,18 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-06-18 — Pause-menu volume, in-game Quit, and conventional menu ordering
+
+**Tag:** `feature`, `ui`, `ux`
+**Source:** user request — add Quit to the in-game Menu group, a volume control to the pause menu, keep resolution as a main-menu button, and order all menu buttons like a normal game. AI-assisted (Cursor).
+
+- **In-game Quit:** the action panel's **Menu ▶** group (all modes) gains a **Quit** entry. It calls `Game._quit_from_menu`, which opens the pause menu straight into its **save-or-discard** prompt, so quitting from gameplay can never silently drop progress.
+- **Pause-menu volume:** `PauseMenu` now hosts a music-volume slider (drag, `-`/`+` buttons, or `\u2190`/`\u2192`). Changes apply live via a `set_volume_controls(volume, callback)` hook; `Game._on_pause_volume` updates the mixer immediately and persists to `settings.json` only on click/drag-release to avoid disk thrash.
+- **Shared open path:** `Game._open_pause_menu(confirm=…)` centralises entering the paused state (reset, layout, sync size, bind volume), used by both **Esc** and the in-game Quit button.
+- **Conventional ordering:** the pause panel reads Resume → (Volume, Window size) → Main Menu → Quit; the main menu reads Save slots → New Game / Continue → Music volume → Resolution (window-size button) → Help → Quit. Resolution stays a button in the main menu as requested.
+
+---
+
 ## 2026-06-18 — Onboarding screens, pause menu, and grouped/colour-coded action panel
 
 **Tag:** `feature`, `ui`, `ux`
