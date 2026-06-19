@@ -494,6 +494,9 @@ class LocationScene:
         self._note_rect: pygame.Rect | None = None
 
     def set_location(self, location_id: str) -> None:
+        # Entering (or re-entering) a location starts with a clean slate so an
+        # old "nothing here" message never carries over.
+        self.clear_note()
         self._location_id = location_id
         loc = get_location(location_id)
         self._background = render_location_background(loc["palette"], self.rect.size)
@@ -510,6 +513,10 @@ class LocationScene:
     def show_note(self, text: str) -> None:
         self._note = text
 
+    def clear_note(self) -> None:
+        self._note = None
+        self._note_rect = None
+
     def hit_test(self, pos: tuple[int, int]) -> str | None:
         """Return hotspot id under ``pos`` (within HOTSPOT_RADIUS) or None."""
         x, y = pos
@@ -524,12 +531,17 @@ class LocationScene:
             self._hover_id = self.hit_test(event.pos)
             return None
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            # A click anywhere dismisses a sticky note first (it must be
-            # acknowledged before another spot can be searched).
-            if self._note is not None:
+            # Clicking the note box itself is the only way to dismiss it.
+            if (
+                self._note is not None
+                and self._note_rect is not None
+                and self._note_rect.collidepoint(event.pos)
+            ):
                 self._note = None
                 self._note_rect = None
                 return None
+            # Otherwise a hotspot click goes through; if it lands on a
+            # yellow spot the caller updates the note text in place.
             return self.hit_test(event.pos)
         return None
 

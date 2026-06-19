@@ -5,6 +5,17 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-06-19 — Fix black map on resize; note updates in place, dismiss by clicking it
+
+**Tag:** `bug`, `ui`, `ux`
+**Source:** user report — resizing the window while in a location turned the screen black, and the wrong-click note shouldn't require a throwaway click to clear. AI-assisted (Cursor).
+
+- **Black screen on resize fixed:** `_build_ui_layout` rebuilds the world-map / location scenes from scratch, which dropped the active location's generated background. It now re-binds `current_location_id` (regenerating the background + quests) so the location view keeps drawing after a resize.
+- **Note updates in place:** clicking a hotspot ("yellow button") while a note is showing no longer needs a dismiss-first click — the click passes straight through and the note text is simply replaced. The note is dismissed *only* by clicking the note box itself (`LocationScene.handle_event` now checks `_note_rect`).
+- **Note clears on leave:** added `LocationScene.clear_note()`, called when stepping out to the world map or back to the tavern (and on entering/re-entering a location), so a stale "nothing here" box never lingers.
+
+---
+
 ## 2026-06-19 — Map cards wrap, corner hint is tavern-only, sticky "nothing here" note
 
 **Tag:** `ui`, `ux`

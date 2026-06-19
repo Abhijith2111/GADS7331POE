@@ -359,6 +359,14 @@ class Game:
         )
         self.world_map_scene = WorldMapScene(canvas_rect)
         self.location_scene = LocationScene(canvas_rect)
+        # On a window resize the scenes are rebuilt fresh; re-bind the
+        # current location so its background is regenerated (otherwise the
+        # location view draws nothing and the screen goes black).
+        if self.current_location_id is not None:
+            self.location_scene.set_location(self.current_location_id)
+            self.location_scene.set_quests(
+                self.world.quests_at(self.current_location_id)
+            )
 
     def _apply_window_dimensions(self, w: int, h: int, *, reset_flows: bool) -> None:
         """Resize the display and rebuild layout. Optionally clears haggle/modal flows."""
@@ -1641,6 +1649,7 @@ class Game:
             return
         self.mode = MODE_WORLD_MAP
         self._action_group = None
+        self.location_scene.clear_note()
         self.text_input.set_active(False)
         self.world_map_scene.set_active_locations(self.world.active_location_ids())
         self._refresh_action_buttons()
@@ -1668,6 +1677,7 @@ class Game:
         self.mode = MODE_TAVERN
         self.current_location_id = None
         self._action_group = None
+        self.location_scene.clear_note()
         if self.current_npc is not None and not self.modal.visible:
             self.text_input.set_active(True)
         self._refresh_action_buttons()
