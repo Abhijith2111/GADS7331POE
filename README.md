@@ -95,8 +95,9 @@ This:
   - `/save` — persist the active save slot.
   - `/help` — open the in-game help guide.
 - **F1** help, **F2** settings (model picker / temperature / regenerate
-  last reply / banner toggle), **F5** next customer, **T** hide the AI
-  notice, **M** mute/unmute background music, **Esc** pause menu.
+  last reply / banner toggle — colour-coded buttons that auto-fit their
+  labels), **F5** next customer, **T** hide the AI notice, **M**
+  mute/unmute background music, **Esc** pause menu.
 
 ### Start-up flow
 
@@ -166,11 +167,16 @@ That opens a world map of four hand-authored locations — *The Old Mines,
 Town Square, The Outskirts,* and the *Castle Hall* — each with four
 search hotspots. The location holding your quest target glows.
 
-Click a location card to walk into it. Pulsing dots are searchable
-hotspots: click the right one and the LLM writes a single short "you
-found it" line, the reward is deposited, and the game whisks you back
-to the bar. Wrong clicks just print "Nothing useful here." and cost
-nothing.
+Each location card word-wraps its name and blurb so the description
+always stays inside the card. Click a card to walk into it. Pulsing
+dots are searchable hotspots: click the right one and the LLM writes a
+single short "you found it" line, the reward is deposited, and the game
+whisks you back to the bar.
+
+Wrong clicks cost nothing — they pop up a small bordered note ("nothing
+here") that **stays put** until you **click the note box** to dismiss
+it. Clicking another hotspot just swaps the note's text in place, and
+the note clears automatically when you leave the location.
 
 The location *and* the hotspot are chosen by the LLM at quest-generation
 time (validated/clamped server-side so a wandering model can never
