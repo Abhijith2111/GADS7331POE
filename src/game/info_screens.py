@@ -197,6 +197,51 @@ def _draw_buttons_diagram(
             ty += body_font.get_height()
 
 
+def _draw_tri(surface: pygame.Surface, cx: int, cy: int, size: int, direction: str, color: tuple[int, int, int]) -> None:
+    """Draw a small triangle centred on (cx, cy) pointing left or right."""
+    if direction == "right":
+        pts = [(cx - size, cy - size), (cx - size, cy + size), (cx + size, cy)]
+    else:  # left
+        pts = [(cx + size, cy - size), (cx + size, cy + size), (cx - size, cy)]
+    pygame.draw.polygon(surface, color, pts)
+
+
+def _draw_page_indicator(
+    surface: pygame.Surface,
+    font: pygame.font.Font,
+    centerx: int,
+    top: int,
+    page: int,
+    pages: int,
+) -> None:
+    """Centred "Page x / y  (<- / -> to flip, Esc to close)" with drawn arrows."""
+    pre = font.render(f"Page {page} / {pages}   (", True, _HINT)
+    mid = font.render(" / ", True, _HINT)
+    post = font.render(" to flip, Esc to close)", True, _HINT)
+    size = max(4, font.get_height() // 4)
+    arrow_w = size * 2
+    gap = 4
+    total = (
+        pre.get_width()
+        + gap + arrow_w + gap
+        + mid.get_width()
+        + gap + arrow_w + gap
+        + post.get_width()
+    )
+    x = centerx - total // 2
+    cy = top + font.get_height() // 2
+
+    surface.blit(pre, (x, top))
+    x += pre.get_width() + gap
+    _draw_tri(surface, x + size, cy, size, "left", _HINT)
+    x += arrow_w + gap
+    surface.blit(mid, (x, top))
+    x += mid.get_width() + gap
+    _draw_tri(surface, x + size, cy, size, "right", _HINT)
+    x += arrow_w + gap
+    surface.blit(post, (x, top))
+
+
 def _get_surface(size: tuple[int, int]) -> pygame.Surface:
     surf = pygame.display.get_surface()
     if surf is None:
@@ -323,12 +368,11 @@ def show_help_screen(clock: pygame.time.Clock) -> str:
 
         _draw_button(screen, close_rect, "Close", head_font, hot=close_rect.collidepoint(mouse), primary=True)
         if page < pages - 1:
-            _draw_button(screen, next_rect, "Next \u25b6", head_font, hot=next_rect.collidepoint(mouse))
+            _draw_button(screen, next_rect, "Next", head_font, hot=next_rect.collidepoint(mouse), arrow="right")
         if page > 0:
-            _draw_button(screen, prev_rect, "\u25c0 Back", head_font, hot=prev_rect.collidepoint(mouse))
+            _draw_button(screen, prev_rect, "Back", head_font, hot=prev_rect.collidepoint(mouse), arrow="left")
 
-        ind = small_font.render(f"Page {page + 1} / {pages}   (\u2190/\u2192 to flip, Esc to close)", True, _HINT)
-        screen.blit(ind, (panel.centerx - ind.get_width() // 2, foot_y + 12))
+        _draw_page_indicator(screen, small_font, panel.centerx, foot_y + 12, page + 1, pages)
 
         pygame.display.flip()
 
