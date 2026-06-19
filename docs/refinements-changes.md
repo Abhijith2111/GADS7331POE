@@ -5,6 +5,17 @@ development. Newest entry at the top.
 
 ---
 
+## 2026-06-19 — Map cards wrap, corner hint is tavern-only, sticky "nothing here" note
+
+**Tag:** `ui`, `ux`
+**Source:** user request — keep location descriptions inside their card boxes, hide the above-chat hint when the chat box isn't shown, and make the wrong-click note click-to-dismiss instead of auto-fading. AI-assisted (Cursor).
+
+- **"Leaving the Tavern" cards** now word-wrap the location name and blurb to the card width (`WorldMapScene.draw`), so longer descriptions stay inside the box instead of spilling over the edge; the blurb is also clipped above the bottom hint.
+- **Corner hint** (`F1 help …`) only draws in the tavern now — it sits just above the chat box, so when the player heads to the world map or a location (no chat box on screen) it goes away with it.
+- **Sticky wrong-click note:** the "there's nothing here" message no longer fades out on a timer. It renders in its own bordered box with a "(click to dismiss)" hint and stays until the player clicks to acknowledge it (`LocationScene._draw_note` + click handling in `handle_event`).
+
+---
+
 ## 2026-06-18 — F2 settings: labels fit their buttons, colour-coded
 
 **Tag:** `ui`, `ux`

@@ -2306,6 +2306,11 @@ class Game:
         return exit_mode
 
     def _draw_corner_help(self) -> None:
+        # This hint sits just above the chat box, so it only belongs in the
+        # tavern. Outside (world map / a location) the chat box is gone, so
+        # the hint goes with it instead of floating over the scene.
+        if self.mode != MODE_TAVERN:
+            return
         font = load_font(14)
         text = "F1 help   F2 settings   F5 next customer   Esc pause   drag top edge to maximize"
         surf = font.render(text, True, (180, 140, 70))

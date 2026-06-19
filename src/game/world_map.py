@@ -24,6 +24,7 @@ from typing import Any
 import pygame
 
 from .assets import load_font
+from .ui import wrap_text
 from .world_map_data import (
     LOCATIONS,
     WHOLESALE_MARKET_ID,
@@ -374,11 +375,27 @@ class WorldMapScene:
             # Icon (procedural glyph in top-left).
             self._draw_card_icon(surface, c, loc)
 
-            # Title & blurb.
-            title_surf = self.card_title_font.render(loc["name"], True, (236, 222, 196))
-            surface.blit(title_surf, (c.rect.left + 80, c.rect.top + 16))
-            blurb_surf = self.body_font.render(loc["blurb"], True, (210, 188, 150))
-            surface.blit(blurb_surf, (c.rect.left + 80, c.rect.top + 50))
+            # Title & blurb, wrapped so neither spills past the card edge.
+            text_left = c.rect.left + 80
+            text_w = c.rect.right - text_left - 16
+            title_lines = wrap_text(loc["name"], self.card_title_font, text_w)
+            ty = c.rect.top + 14
+            for line in title_lines:
+                line_surf = self.card_title_font.render(line, True, (236, 222, 196))
+                surface.blit(line_surf, (text_left, ty))
+                ty += line_surf.get_height() + 2
+
+            # Blurb fills the space between the title and the bottom hint.
+            blurb_lines = wrap_text(loc["blurb"], self.body_font, text_w)
+            line_h = self.body_font.get_height() + 2
+            by = ty + 4
+            blurb_bottom = c.rect.bottom - 34
+            for line in blurb_lines:
+                if by + self.body_font.get_height() > blurb_bottom:
+                    break
+                line_surf = self.body_font.render(line, True, (210, 188, 150))
+                surface.blit(line_surf, (text_left, by))
+                by += line_h
 
             # Active-quest hint.
             if c.glowing:
@@ -471,7 +488,10 @@ class LocationScene:
         self._hotspots: list[_Hotspot] = []
         self._hover_id: str | None = None
         self._quests: list[dict[str, Any]] = []
-        self._note: tuple[str, float] | None = None  # (text, born_at)
+        # Sticky note shown after a wrong click. It stays until the player
+        # clicks it (no auto-fade), so the text is never missed.
+        self._note: str | None = None
+        self._note_rect: pygame.Rect | None = None
 
     def set_location(self, location_id: str) -> None:
         self._location_id = location_id
@@ -488,7 +508,7 @@ class LocationScene:
         self._quests = list(quests)
 
     def show_note(self, text: str) -> None:
-        self._note = (text, time.monotonic())
+        self._note = text
 
     def hit_test(self, pos: tuple[int, int]) -> str | None:
         """Return hotspot id under ``pos`` (within HOTSPOT_RADIUS) or None."""
@@ -504,6 +524,12 @@ class LocationScene:
             self._hover_id = self.hit_test(event.pos)
             return None
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            # A click anywhere dismisses a sticky note first (it must be
+            # acknowledged before another spot can be searched).
+            if self._note is not None:
+                self._note = None
+                self._note_rect = None
+                return None
             return self.hit_test(event.pos)
         return None
 
@@ -535,26 +561,40 @@ class LocationScene:
         for h in self._hotspots:
             self._draw_hotspot(surface, h, pulse)
 
-        # Transient note ("nothing here.").
+        # Sticky note ("nothing here.") — stays until the player clicks it.
         if self._note is not None:
-            text, born = self._note
-            elapsed = time.monotonic() - born
-            if elapsed > 2.4:
-                self._note = None
-            else:
-                alpha = max(0, int(255 * (1.0 - elapsed / 2.4)))
-                note_surf = self.body_font.render(text, True, (236, 222, 196))
-                note_bg = pygame.Surface(
-                    (note_surf.get_width() + 24, note_surf.get_height() + 12),
-                    pygame.SRCALPHA,
-                )
-                note_bg.fill((20, 14, 8, min(220, alpha + 40)))
-                pygame.draw.rect(note_bg, (180, 140, 70, alpha), note_bg.get_rect(), 2)
-                note_surf.set_alpha(alpha)
-                x = self.rect.centerx - note_bg.get_width() // 2
-                y = self.rect.bottom - 80
-                surface.blit(note_bg, (x, y))
-                surface.blit(note_surf, (x + 12, y + 6))
+            self._draw_note(surface, self._note)
+        else:
+            self._note_rect = None
+
+    def _draw_note(self, surface: pygame.Surface, text: str) -> None:
+        pad_x, pad_y = 16, 12
+        max_text_w = min(560, self.rect.width - 80)
+        lines = wrap_text(text, self.body_font, max_text_w)
+        hint = "(click to dismiss)"
+        line_h = self.body_font.get_height() + 4
+
+        text_w = max(self.body_font.size(line)[0] for line in lines)
+        hint_surf = self.small_font.render(hint, True, (200, 165, 100))
+        box_w = max(text_w, hint_surf.get_width()) + pad_x * 2
+        box_h = pad_y * 2 + line_h * len(lines) + 6 + hint_surf.get_height()
+
+        x = self.rect.centerx - box_w // 2
+        y = self.rect.bottom - box_h - 30
+        rect = pygame.Rect(x, y, box_w, box_h)
+        self._note_rect = rect
+
+        box = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+        box.fill((20, 14, 8, 235))
+        pygame.draw.rect(box, (180, 140, 70), box.get_rect(), 2, border_radius=8)
+        surface.blit(box, (x, y))
+
+        ty = y + pad_y
+        for line in lines:
+            line_surf = self.body_font.render(line, True, (236, 222, 196))
+            surface.blit(line_surf, (x + pad_x, ty))
+            ty += line_h
+        surface.blit(hint_surf, (x + pad_x, ty + 4))
 
     def _draw_hotspot(
         self, surface: pygame.Surface, h: _Hotspot, pulse: float
